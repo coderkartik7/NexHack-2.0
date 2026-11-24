@@ -1,5 +1,7 @@
 import type { FaceLandmarkerResult, HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import type { SignalFrame, SignalName } from '../types/signals';
+import { gazeFeatureExtractor } from './gazeFeatures';
+import type { GazeFeatureExtractionResult } from '../gaze/types';
 
 /**
  * Computes 2D Euclidean distance between two landmark points
@@ -20,7 +22,8 @@ function dist2D(
 export function extractSignals(
   timestampMs: number,
   faceResult: FaceLandmarkerResult | null,
-  handResult: HandLandmarkerResult | null
+  handResult: HandLandmarkerResult | null,
+  outGazeFeatures?: { result?: GazeFeatureExtractionResult }
 ): SignalFrame {
   const signals: Record<SignalName, number | null> = {
     headX: null,
@@ -33,10 +36,16 @@ export function extractSignals(
     handY: null,
     pinch: null,
     openPalm: null,
+    gazeX: null,
+    gazeY: null,
+    irisDistL: null,
+    irisDistR: null,
+    eyeOpenness: null,
   };
 
   let faceQuality = 0;
   let handQuality = 0;
+  let eyeQuality = 0;
 
   // 1. Process Face landmarks & blendshapes
   if (
@@ -46,11 +55,6 @@ export function extractSignals(
     faceResult.faceLandmarks[0].length >= 468
   ) {
     const lm = faceResult.faceLandmarks[0];
-    // Key landmarks:
-    // Left eye outer: 33, Right eye outer: 263
-    // Nose tip: 1
-    // Left eye center: 468/33/133, Right eye center: 473/362/263
-    // Left iris/pupil or inner corner: 133, Right inner corner: 362
     const leftEye = lm[33];
     const rightEye = lm[263];
     const noseTip = lm[1];
@@ -60,26 +64,16 @@ export function extractSignals(
 
     // Compute face quality based on inter-ocular distance (typical face occupies ~0.1 to 0.35 screen width)
     if (iod > 0.04) {
-      // Scale quality: 0 at iod < 0.04, 1.0 around iod ~ 0.15
       faceQuality = Math.min(1.0, Math.max(0.0, (iod - 0.04) / 0.1));
     }
 
     if (iod > 0.02) {
-      // Mid-eye point
       const midEyeX = (leftEye.x + rightEye.x) / 2.0;
       const midEyeY = (leftEye.y + rightEye.y) / 2.0;
 
-      // Distance-normalized nose offset
-      // In mirrored video, when user moves head right (their right = camera left in unmirrored),
-      // we mirror headX so user moving right yields positive headX.
-      // lm.x is 0 at left of camera feed (which is user's right side in mirrored display).
-      // Mirrored coordinate: (1 - midEyeX) or inverted nose offset.
-      // Let's adopt consistent user perspective: moving head right increases headX.
       signals.headX = -(noseTip.x - midEyeX) / iod;
       signals.headY = (noseTip.y - midEyeY) / iod;
 
-      // Head roll: angle between eyes
-      // dy / dx
       const dy = rightEye.y - leftEye.y;
       const dx = rightEye.x - leftEye.x;
       signals.headRoll = Math.atan2(dy, dx);
@@ -100,6 +94,27 @@ export function extractSignals(
       const blinkR = shapeMap.get('eyeBlinkRight') ?? 0;
       signals.blink = (blinkL + blinkR) / 2.0;
     }
+
+    // Extract Eye / Gaze features if iris landmarks are present
+    const matrix = faceResult.facialTransformationMatrixes?.[0]?.data as number[] | undefined;
+    const gazeRes = gazeFeatureExtractor.extract(lm, matrix, timestampMs);
+    if (outGazeFeatures) {
+      outGazeFeatures.result = gazeRes;
+    }
+
+    signals.gazeX = gazeRes.rawGazeX;
+    signals.gazeY = gazeRes.rawGazeY;
+    signals.eyeOpenness = gazeRes.eyeOpenness;
+    if (gazeRes.rawFeatures) {
+      signals.irisDistL = gazeRes.rawFeatures.irisX_L;
+      signals.irisDistR = gazeRes.rawFeatures.irisX_R;
+    }
+
+    if (gazeRes.isValid) {
+      eyeQuality = faceQuality;
+    } else {
+      eyeQuality = gazeRes.blinkDetected ? 0.1 : 0;
+    }
   }
 
   // 2. Process Hand landmarks
@@ -110,14 +125,6 @@ export function extractSignals(
     handResult.landmarks[0].length >= 21
   ) {
     const hand = handResult.landmarks[0];
-    // Hand Landmarks:
-    // 0: Wrist
-    // 4: Thumb tip
-    // 8: Index fingertip
-    // 9: Middle finger MCP
-    // 12: Middle fingertip
-    // 16: Ring fingertip
-    // 20: Pinky fingertip
     const wrist = hand[0];
     const thumbTip = hand[4];
     const indexTip = hand[8];
@@ -126,22 +133,15 @@ export function extractSignals(
     const ringTip = hand[16];
     const pinkyTip = hand[20];
 
-    // Hand size: distance from wrist (0) to middle MCP (9)
     const handSize = Math.max(dist2D(wrist, middleMcp), 0.01);
-
-    // Hand quality based on hand size in frame
     handQuality = Math.min(1.0, Math.max(0.0, (handSize - 0.05) / 0.15));
 
-    // Cursor coordinates (mirrored so moving user hand right moves cursor right)
-    // indexTip.x is normalized [0, 1]. In mirrored web view, 1 - indexTip.x maps camera right to screen right.
     signals.handX = 1.0 - indexTip.x;
     signals.handY = indexTip.y;
 
-    // Pinch: distance between thumb tip (4) and index tip (8) divided by hand size
     const pinchDist = dist2D(thumbTip, indexTip);
     signals.pinch = pinchDist / handSize;
 
-    // Open palm: mean fingertip-to-wrist distance divided by hand size
     const tips = [thumbTip, indexTip, middleTip, ringTip, pinkyTip];
     const sumDist = tips.reduce((acc, tip) => acc + dist2D(wrist, tip), 0);
     const meanTipDist = sumDist / tips.length;
@@ -153,6 +153,7 @@ export function extractSignals(
     quality: {
       face: faceQuality,
       hand: handQuality,
+      eye: eyeQuality,
     },
     signals,
   };

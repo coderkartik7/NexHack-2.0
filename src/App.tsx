@@ -1,64 +1,109 @@
 import { useState } from 'react';
 import { DebugPage } from './pages/DebugPage';
 import { CalibrationPage } from './pages/CalibrationPage';
-import { Activity, Sliders } from 'lucide-react';
+import { LessonPage } from './components/LessonPage';
+import { StudyPage } from './components/StudyPage';
+import { Activity, Sliders, ShieldCheck, BookOpen, BarChart3 } from 'lucide-react';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'debug' | 'calibration'>('debug');
+  const [activeTab, setActiveTab] = useState<'study' | 'lesson' | 'debug' | 'calibration'>('study');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Top App Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-teal-500/20 selection:text-teal-200">
+      {/* Precision Instrument Top Header */}
+      <header className="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          {/* Logo & Product Identity */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-400 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">
-              G
+            <div className="w-7 h-7 rounded-md bg-zinc-900 border border-zinc-700/80 flex items-center justify-center text-teal-400 font-mono font-semibold text-xs shadow-inner">
+              GL
             </div>
-            <div>
-              <span className="font-black text-lg text-white tracking-tight">GestureLearn</span>
-              <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-950 text-indigo-400 border border-indigo-800">
-                Phase 1 & 2
+            <div className="flex items-baseline gap-2">
+              <span className="font-semibold text-sm tracking-tight text-zinc-100">GestureLearn</span>
+              <span className="hidden sm:inline-block text-[11px] text-zinc-500 font-mono">
+                Hands-Free Classroom Control
               </span>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+          {/* Navigation Segment Control */}
+          <nav className="flex items-center gap-1 bg-zinc-900/90 p-0.5 rounded-lg border border-zinc-800">
             <button
-              onClick={() => setActiveTab('debug')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'debug'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+              onClick={() => setActiveTab('study')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === 'study'
+                  ? 'bg-zinc-800 text-teal-300 shadow-xs border border-zinc-700/60'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Activity className="w-4 h-4" />
-              Vision Stream (Phase 1)
+              <BarChart3 className="w-3.5 h-3.5 text-teal-400" />
+              Evaluation Study
+            </button>
+            <button
+              onClick={() => setActiveTab('lesson')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === 'lesson'
+                  ? 'bg-zinc-800 text-teal-300 shadow-xs border border-zinc-700/60'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-teal-400" />
+              Lesson Activity
+            </button>
+            <button
+              onClick={() => setActiveTab('debug')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === 'debug'
+                  ? 'bg-zinc-800 text-teal-300 shadow-xs border border-zinc-700/60'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-teal-400" />
+              Live Telemetry
             </button>
             <button
               onClick={() => setActiveTab('calibration')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'calibration'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-zinc-800 text-teal-300 shadow-xs border border-zinc-700/60'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Sliders className="w-4 h-4" />
-              Calibration & Profiles (Phase 2)
+              <Sliders className="w-3.5 h-3.5 text-teal-400" />
+              Calibration & Profiles
             </button>
           </nav>
+
+          {/* Privacy badge */}
+          <div className="hidden md:flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Local Vision Sandbox</span>
+          </div>
         </div>
       </header>
 
       {/* Main Content View */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6">
-        {activeTab === 'debug' ? <DebugPage /> : <CalibrationPage />}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+        {activeTab === 'study' ? (
+          <StudyPage />
+        ) : activeTab === 'lesson' ? (
+          <LessonPage
+            onNavigateToCalibration={() => setActiveTab('calibration')}
+            onNavigateToProfiles={() => setActiveTab('calibration')}
+          />
+        ) : activeTab === 'debug' ? (
+          <DebugPage />
+        ) : (
+          <CalibrationPage />
+        )}
       </main>
 
-      {/* App Footer */}
-      <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
-        GestureLearn Client-Side Vision Engine • Zero Cloud Streaming (Privacy Safe) • 1€ Filtered
+      {/* Grounded Utility Footer */}
+      <footer className="border-t border-zinc-900 bg-zinc-950 py-3 text-xs text-zinc-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-2">
+          <span>Client-side inference via MediaPipe &middot; 1€ adaptive velocity filtering</span>
+          <span className="font-mono text-[11px] text-zinc-600">Zero cloud streaming &middot; IndexedDB isolated</span>
+        </div>
       </footer>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { SignalName, InputMode } from '../types/signals';
+import type { GazeModel } from '../gaze/types';
 
 export type CommandName = 'select' | 'grab' | 'pause';
 export type GestureDirection = 'high' | 'low';
@@ -44,6 +45,10 @@ export interface LearnerProfile {
   cursorMapping: CursorMapping;
   restBaseline: Record<SignalName, SignalSummaryStats>;
   commands: Record<CommandName, CommandBinding>;
+  gaze?: GazeModel; // required when mode === 'eye'
+  largeTargetMode?: boolean; // enabled if validation accuracy is poor or requested
+  dwellSelectionEnabled?: boolean; // optional dwell select fallback
+  dwellTimeMs?: number; // dwell time in ms (default 1000)
 }
 
 export interface GestureOption {

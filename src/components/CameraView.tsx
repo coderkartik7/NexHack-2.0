@@ -29,7 +29,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
     };
   }, []);
 
-  // Draw landmark overlay
+  // Draw technical reticle and landmark overlay
   useEffect(() => {
     let animId: number;
 
@@ -46,10 +46,26 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          // Head landmarks drawing
+          // Precision viewfinder center crosshair
+          const cx = canvas.width / 2;
+          const cy = canvas.height / 2;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+
+          ctx.beginPath();
+          ctx.moveTo(cx - 20, cy);
+          ctx.lineTo(cx + 20, cy);
+          ctx.moveTo(cx, cy - 20);
+          ctx.lineTo(cx, cy + 20);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Head landmarks drawing - refined teal technical aesthetic
           if (inputMode === 'head' && visionPipeline.latestFaceResult?.faceLandmarks?.[0]) {
             const lms = visionPipeline.latestFaceResult.faceLandmarks[0];
-            ctx.fillStyle = '#38bdf8'; // sky-400
+            ctx.fillStyle = '#2dd4bf'; // teal-400
+            
             // Draw essential landmarks: eyes, nose, mouth
             const keyPoints = [1, 33, 133, 263, 362, 61, 291, 13, 14, 10, 152];
             for (const idx of keyPoints) {
@@ -59,7 +75,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
                 const x = (1.0 - pt.x) * canvas.width;
                 const y = pt.y * canvas.height;
                 ctx.beginPath();
-                ctx.arc(x, y, idx === 1 ? 5 : 3, 0, 2 * Math.PI);
+                ctx.arc(x, y, idx === 1 ? 4 : 2.5, 0, 2 * Math.PI);
                 ctx.fill();
               }
             }
@@ -68,8 +84,8 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
             const pL = lms[33];
             const pR = lms[263];
             if (pL && pR) {
-              ctx.strokeStyle = '#22d3ee';
-              ctx.lineWidth = 2;
+              ctx.strokeStyle = '#14b8a6';
+              ctx.lineWidth = 1.5;
               ctx.beginPath();
               ctx.moveTo((1.0 - pL.x) * canvas.width, pL.y * canvas.height);
               ctx.lineTo((1.0 - pR.x) * canvas.width, pR.y * canvas.height);
@@ -80,9 +96,9 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
           // Hand landmarks drawing
           if (inputMode === 'hand' && visionPipeline.latestHandResult?.landmarks?.[0]) {
             const hand = visionPipeline.latestHandResult.landmarks[0];
-            ctx.strokeStyle = '#4ade80'; // green-400
-            ctx.fillStyle = '#22c55e';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(45, 212, 191, 0.7)'; // teal-400
+            ctx.fillStyle = '#14b8a6';
+            ctx.lineWidth = 1.5;
 
             // Hand connections
             const connections = [
@@ -109,8 +125,8 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
               const x = (1.0 - pt.x) * canvas.width;
               const y = pt.y * canvas.height;
               ctx.beginPath();
-              ctx.arc(x, y, i === 8 ? 6 : 3, 0, 2 * Math.PI);
-              ctx.fillStyle = i === 8 ? '#f43f5e' : '#4ade80';
+              ctx.arc(x, y, i === 8 ? 4.5 : 2.5, 0, 2 * Math.PI);
+              ctx.fillStyle = i === 8 ? '#f43f5e' : '#2dd4bf';
               ctx.fill();
             }
           }
@@ -124,11 +140,11 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
   }, [showLandmarks, isStreaming, inputMode]);
 
   return (
-    <div className="relative w-full max-w-xl aspect-4/3 bg-slate-900 rounded-2xl overflow-hidden shadow-xl border border-slate-800">
+    <div className="relative w-full aspect-4/3 bg-zinc-950 rounded-lg overflow-hidden border border-zinc-800 shadow-sm flex flex-col justify-end">
       {/* Video Element (mirrored display) */}
       <video
         ref={videoRef}
-        className="w-full h-full object-cover transform -scale-x-100"
+        className="absolute inset-0 w-full h-full object-cover transform -scale-x-100"
         playsInline
         muted
       />
@@ -139,28 +155,33 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
         className="absolute inset-0 w-full h-full pointer-events-none"
       />
 
+      {/* Subtle corner reticle markings */}
+      <div className="absolute top-2 left-2 text-[10px] font-mono text-zinc-400/80 bg-zinc-950/70 backdrop-blur-xs px-2 py-0.5 rounded border border-zinc-800">
+        CAM_01 &bull; {inputMode.toUpperCase()}
+      </div>
+
       {/* Loading state */}
       {isLoadingModels && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 text-white z-20 backdrop-blur-xs">
-          <Loader2 className="w-10 h-10 animate-spin text-indigo-400 mb-3" />
-          <p className="text-base font-medium">Initializing MediaPipe Vision AI models...</p>
-          <span className="text-xs text-slate-400 mt-1">This happens once per session</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/85 text-zinc-100 z-20 backdrop-blur-xs">
+          <Loader2 className="w-8 h-8 animate-spin text-teal-400 mb-2.5" />
+          <p className="text-xs font-medium text-zinc-200">Initializing MediaPipe neural models</p>
+          <span className="text-[11px] font-mono text-zinc-500 mt-1">FaceLandmarker & HandLandmarker</span>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/90 text-white p-6 text-center z-30">
-          <AlertCircle className="w-12 h-12 text-red-400 mb-3" />
-          <h3 className="text-lg font-bold">Camera Initialization Failed</h3>
-          <p className="text-sm text-red-200 mt-2 max-w-md">{error}</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/95 text-zinc-100 p-6 text-center z-30">
+          <AlertCircle className="w-8 h-8 text-rose-400 mb-2.5" />
+          <h3 className="text-sm font-semibold text-zinc-100">Video Capture Stream Offline</h3>
+          <p className="text-xs text-zinc-400 mt-1.5 max-w-sm font-mono leading-relaxed">{error}</p>
           <button
             onClick={() => {
               if (videoRef.current) {
                 visionPipeline.start(videoRef.current).catch(() => {});
               }
             }}
-            className="mt-5 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-semibold transition-colors"
+            className="mt-4 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-md text-xs font-medium text-zinc-200 transition-colors"
           >
             Retry Camera Access
           </button>
@@ -169,17 +190,17 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
 
       {/* Quality Warning Banner */}
       {qualityWarning && isStreaming && (
-        <div className="absolute top-3 left-3 right-3 bg-amber-500/90 text-slate-950 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-lg z-10 backdrop-blur-xs animate-pulse">
-          <AlertCircle className="w-5 h-5 shrink-0" />
+        <div className="absolute top-3 left-3 right-3 bg-amber-950/90 border border-amber-800/80 text-amber-300 px-3 py-2 rounded-md text-xs font-medium flex items-center gap-2 shadow-sm z-10 backdrop-blur-xs">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
           <span>{qualityWarning}</span>
         </div>
       )}
 
       {/* Idle / Off State indicator */}
       {!isStreaming && !isLoadingModels && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 z-10">
-          <Camera className="w-12 h-12 mb-2 opacity-50" />
-          <p className="text-sm">Webcam is inactive</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 z-10">
+          <Camera className="w-8 h-8 mb-2 opacity-40" />
+          <p className="text-xs font-mono">Video stream standby</p>
         </div>
       )}
     </div>

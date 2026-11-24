@@ -5,9 +5,11 @@ import { cameraService } from './camera';
 import { landmarkersService } from './landmarkers';
 import { extractSignals } from './signals';
 import type { FaceLandmarkerResult, HandLandmarkerResult } from '@mediapipe/tasks-vision';
+import type { GazeFeatureExtractionResult } from '../gaze/types';
 
 export interface PipelineStoreState {
   currentFrame: SignalFrame | null;
+  latestGazeResult: GazeFeatureExtractionResult | null;
   fps: number;
   inputMode: InputMode;
   isStreaming: boolean;
@@ -20,6 +22,7 @@ export interface PipelineStoreState {
 
 export const usePipelineStore = create<PipelineStoreState>((set) => ({
   currentFrame: null,
+  latestGazeResult: null,
   fps: 0,
   inputMode: 'head',
   isStreaming: false,
@@ -62,15 +65,21 @@ export class VisionPipeline {
       'handY',
       'pinch',
       'openPalm',
+      'gazeX',
+      'gazeY',
+      'irisDistL',
+      'irisDistR',
+      'eyeOpenness',
     ];
     for (const name of signalNames) {
       // headX, headY, handX, handY benefit from slightly higher beta for quick cursor responsiveness with low lag
       const isCursor = name === 'headX' || name === 'headY' || name === 'handX' || name === 'handY';
+      const isGaze = name === 'gazeX' || name === 'gazeY';
       this.filters.set(
         name,
         new OneEuroFilter({
-          minCutoff: 1.0,
-          beta: isCursor ? 0.015 : 0.007,
+          minCutoff: isGaze ? 0.8 : 1.0,
+          beta: isCursor ? 0.015 : isGaze ? 0.005 : 0.007,
           dCutoff: 1.0,
         })
       );
@@ -166,8 +175,8 @@ export class VisionPipeline {
     const mode = usePipelineStore.getState().inputMode;
 
     try {
-      // Run detectForVideo only for the active mode (or both if needed, but prioritizing current mode)
-      if (mode === 'head') {
+      // Run detectForVideo for active mode (both head and eye modes use faceLandmarker)
+      if (mode === 'head' || mode === 'eye') {
         this.latestFaceResult = face.detectForVideo(this.videoElement, timestampMs);
         this.latestHandResult = null;
       } else {
@@ -176,11 +185,16 @@ export class VisionPipeline {
       }
 
       // Extract normalized raw signals
+      const gazeOut: { result?: GazeFeatureExtractionResult } = {};
       const rawFrame = extractSignals(
         timestampMs,
         this.latestFaceResult,
-        this.latestHandResult
+        this.latestHandResult,
+        gazeOut
       );
+      if (gazeOut.result) {
+        usePipelineStore.setState({ latestGazeResult: gazeOut.result });
+      }
 
       // Apply One Euro filter to continuous signals
       const smoothedSignals = { ...rawFrame.signals };

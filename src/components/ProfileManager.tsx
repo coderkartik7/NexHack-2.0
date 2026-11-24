@@ -13,15 +13,18 @@ import {
 import type { LearnerProfile } from '../calibration/types';
 import {
   User,
-  CheckCircle,
+  CheckCircle2,
   Copy,
   Trash2,
   Download,
   Upload,
-  Sparkles,
+  Plus,
+  Check,
   Edit2,
   Sliders,
-  AlertTriangle,
+  AlertCircle,
+  Eye,
+  Hand,
 } from 'lucide-react';
 
 interface ProfileManagerProps {
@@ -50,12 +53,12 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
   const handleSetActive = (id: string) => {
     setActiveProfileId(id);
     setActiveId(id);
-    setNotification('Active learner profile changed.');
+    setNotification('Active learner profile set.');
     setTimeout(() => setNotification(null), 3000);
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete profile "${name}"?`)) {
+    if (confirm(`Delete calibrated profile "${name}"? This cannot be undone.`)) {
       await deleteProfile(id);
       await refresh();
       setNotification(`Profile "${name}" removed.`);
@@ -105,11 +108,11 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
         await refresh();
         setActiveProfileId(imported.id);
         setActiveId(imported.id);
-        setNotification(`Successfully imported profile "${imported.name}".`);
+        setNotification(`Imported profile "${imported.name}".`);
         setTimeout(() => setNotification(null), 4000);
         setError(null);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Invalid profile JSON.');
+        setError(err instanceof Error ? err.message : 'Invalid profile configuration.');
       }
     };
     reader.readAsText(file);
@@ -119,21 +122,21 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
   const getReliabilityBadge = (rating: string) => {
     if (rating === 'reliable') {
       return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-900/60">
           Reliable
         </span>
       );
     }
     if (rating === 'marginal') {
       return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-950/60 text-amber-400 border border-amber-900/60">
           Marginal
         </span>
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950 text-red-400 border border-red-800">
-        Unreliable
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-rose-950/60 text-rose-400 border border-rose-900/60">
+        Review
       </span>
     );
   };
@@ -141,21 +144,21 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto pb-10">
       {/* Top Banner & Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
         <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-3">
-            <User className="w-7 h-7 text-indigo-400" />
-            Learner Profiles Manager
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Manage individual calibrated thresholds and comfort ranges stored securely in IndexedDB
+          <h2 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+            <User className="w-4 h-4 text-teal-400" />
+            Configured Learner Profiles
+          </h2>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Individual resting baselines, calibrated ranges, and activation bounds stored in IndexedDB
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-xl text-sm font-bold cursor-pointer transition-colors shadow-sm">
-            <Upload className="w-4 h-4 text-slate-400" />
-            Import Profile
+        <div className="flex items-center gap-2.5">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-zinc-300 rounded-md text-xs font-medium cursor-pointer transition-colors shadow-2xs">
+            <Upload className="w-3.5 h-3.5 text-zinc-400" />
+            Import JSON
             <input
               type="file"
               accept=".json"
@@ -166,118 +169,118 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
 
           <button
             onClick={onStartCalibration}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-102"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-zinc-950 rounded-md text-xs font-semibold shadow-2xs transition-colors"
           >
-            <Sparkles className="w-4 h-4" />
-            New Calibration Wizard
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            New Calibration
           </button>
         </div>
       </div>
 
       {notification && (
-        <div className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" />
+        <div className="bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 px-3.5 py-2 rounded-md text-xs font-medium flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           {notification}
         </div>
       )}
 
       {error && (
-        <div className="bg-red-950/80 border border-red-800 text-red-300 px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4" />
+        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 px-3.5 py-2 rounded-md text-xs font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-400" />
           {error}
         </div>
       )}
 
-      {/* Profiles List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Profiles Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {profiles.map((p) => {
           const isActive = p.id === activeId;
           return (
             <div
               key={p.id}
-              className={`bg-slate-900 border rounded-2xl p-5 flex flex-col justify-between transition-all ${
+              className={`bg-zinc-900/60 border rounded-lg p-4 flex flex-col justify-between transition-colors ${
                 isActive
-                  ? 'border-indigo-500 shadow-xl shadow-indigo-500/10 ring-2 ring-indigo-500/20'
-                  : 'border-slate-800 hover:border-slate-700'
+                  ? 'border-teal-500/80 bg-zinc-900/90 shadow-2xs'
+                  : 'border-zinc-800 hover:border-zinc-700'
               }`}
             >
               <div>
                 {/* Header info */}
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${
+                      className={`w-8 h-8 rounded-md flex items-center justify-center font-mono font-semibold text-xs border ${
                         p.mode === 'head'
-                          ? 'bg-indigo-950 text-indigo-400 border border-indigo-800'
-                          : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          ? 'bg-zinc-950 text-teal-400 border-zinc-800'
+                          : 'bg-zinc-950 text-emerald-400 border-zinc-800'
                       }`}
                     >
-                      {p.name.charAt(0).toUpperCase()}
+                      {p.mode === 'head' ? <Eye className="w-4 h-4" /> : <Hand className="w-4 h-4" />}
                     </div>
                     <div>
                       {editingId === p.id ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="text"
                             value={renameText}
                             onChange={(e) => setRenameText(e.target.value)}
-                            className="bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-sm text-white focus:outline-none"
+                            className="bg-zinc-950 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-100 focus:outline-teal-500 font-sans"
                             autoFocus
                           />
                           <button
                             onClick={() => handleSaveRename(p.id)}
-                            className="text-xs bg-indigo-600 px-2 py-1 rounded text-white"
+                            className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-0.5 rounded text-zinc-200"
                           >
                             Save
                           </button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-white text-base">{p.name}</h3>
+                          <h3 className="font-semibold text-zinc-100 text-sm">{p.name}</h3>
                           <button
                             onClick={() => handleStartRename(p)}
-                            className="text-slate-500 hover:text-slate-300"
+                            className="text-zinc-500 hover:text-zinc-300"
                             title="Rename"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3 h-3" />
                           </button>
                         </div>
                       )}
-                      <p className="text-xs text-slate-400">
-                        Mode: <span className="capitalize font-semibold text-slate-300">{p.mode}</span> • Calibrated{' '}
+                      <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                        <span className="capitalize">{p.mode}</span> Mode &bull; Calibrated{' '}
                         {new Date(p.updatedAt).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
 
                   {isActive && (
-                    <span className="px-2.5 py-1 bg-indigo-950 text-indigo-300 border border-indigo-700 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                      <CheckCircle className="w-3 h-3 text-indigo-400" />
+                    <span className="px-2 py-0.5 bg-teal-950/60 text-teal-400 border border-teal-800/80 rounded text-[10px] font-mono font-medium flex items-center gap-1">
+                      <Check className="w-3 h-3" />
                       Active
                     </span>
                   )}
                 </div>
 
-                {/* Command Reliability Badges */}
-                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 my-3 flex flex-col gap-2">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Calibrated Gestures & Reliability
+                {/* Command Reliability Breakdown */}
+                <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-md p-2.5 my-3 flex flex-col gap-1.5">
+                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                    Calibrated Triggers & Separation
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {(['select', 'grab', 'pause'] as const).map((cmd) => {
                       const binding = p.commands[cmd];
                       if (!binding) return null;
                       return (
                         <div
                           key={cmd}
-                          className="flex items-center justify-between text-xs py-0.5 border-b border-slate-900 last:border-0"
+                          className="flex items-center justify-between text-xs py-0.5 border-b border-zinc-900 last:border-0"
                         >
-                          <span className="font-mono text-slate-300 capitalize font-medium">
-                            {cmd} ({binding.signal})
+                          <span className="font-mono text-zinc-300 capitalize text-xs">
+                            {cmd} <span className="text-zinc-500">({binding.signal})</span>
                           </span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] text-slate-500">
-                              thr: {binding.enter}
+                          <div className="flex items-center gap-2 font-mono text-[11px]">
+                            <span className="text-zinc-500">
+                              thr: <span className="text-zinc-300">{binding.enter}</span>
                             </span>
                             {getReliabilityBadge(binding.separability?.rating ?? 'reliable')}
                           </div>
@@ -288,48 +291,48 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
                 </div>
 
                 {/* Range mapping summary */}
-                <div className="text-xs text-slate-400 flex items-center gap-2 mb-4">
-                  <Sliders className="w-3.5 h-3.5 text-slate-500" />
+                <div className="text-[11px] text-zinc-400 font-mono flex items-center gap-1.5 mb-3">
+                  <Sliders className="w-3 h-3 text-zinc-500" />
                   <span>
-                    Range Gain: X {p.cursorMapping?.gainX?.toFixed(1) ?? '1.0'}x, Y{' '}
+                    Cursor Gain: X {p.cursorMapping?.gainX?.toFixed(1) ?? '1.0'}x &middot; Y{' '}
                     {p.cursorMapping?.gainY?.toFixed(1) ?? '1.0'}x
                   </span>
                 </div>
               </div>
 
               {/* Bottom Card Controls */}
-              <div className="flex items-center justify-between border-t border-slate-800/80 pt-3">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
+                <div className="flex items-center gap-1.5">
                   {!isActive && (
                     <button
                       onClick={() => handleSetActive(p.id)}
-                      className="text-xs font-bold px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
+                      className="text-xs font-medium px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/80 text-zinc-200 rounded transition-colors"
                     >
-                      Set Active
+                      Set as Active
                     </button>
                   )}
                   <button
                     onClick={() => handleDuplicate(p.id)}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                    className="p-1.5 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-800 transition-colors"
                     title="Duplicate Profile"
                   >
-                    <Copy className="w-4 h-4" />
+                    <Copy className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleExport(p)}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                    title="Export JSON"
+                    className="p-1.5 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-800 transition-colors"
+                    title="Export Profile JSON"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 <button
                   onClick={() => handleDelete(p.id, p.name)}
-                  className="p-1.5 text-red-400 hover:text-red-300 rounded-lg hover:bg-red-950/40 transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-rose-400 rounded hover:bg-zinc-800 transition-colors"
                   title="Delete Profile"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -337,17 +340,17 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onStartCalibrati
         })}
 
         {profiles.length === 0 && (
-          <div className="col-span-2 bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center">
-            <User className="w-12 h-12 text-slate-600 mb-3" />
-            <h3 className="text-lg font-bold text-slate-200">No Learner Profiles Yet</h3>
-            <p className="text-sm text-slate-400 max-w-md mt-1 mb-6">
-              Calibrate individual resting baseline, comfortable range of motion, and activation gestures to avoid false triggers.
+          <div className="col-span-2 bg-zinc-900/40 border border-dashed border-zinc-800 rounded-lg p-10 text-center flex flex-col items-center">
+            <User className="w-8 h-8 text-zinc-600 mb-2.5" />
+            <h3 className="text-sm font-semibold text-zinc-200">No Learner Profiles Configured</h3>
+            <p className="text-xs text-zinc-400 max-w-sm mt-1 mb-5">
+              Run the calibration wizard to compute resting baselines and hysteresis thresholds tailored to the learner.
             </p>
             <button
               onClick={onStartCalibration}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm"
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-zinc-950 rounded-md font-semibold text-xs transition-colors"
             >
-              Run First Calibration
+              Start Initial Calibration
             </button>
           </div>
         )}

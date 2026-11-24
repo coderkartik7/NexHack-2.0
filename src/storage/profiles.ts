@@ -67,6 +67,12 @@ export function exportProfileToJson(profile: LearnerProfile): string {
 /**
  * Imports profile from JSON with schema validation
  */
+export const CURRENT_PROFILE_VERSION = 2;
+
+/**
+ * Imports profile from JSON with schema validation and migrations.
+ * Bump profile version and migrates existing head/hand profiles so they still load and validate.
+ */
 export function importProfileFromJson(jsonStr: string): LearnerProfile {
   let data: unknown;
   try {
@@ -84,8 +90,8 @@ export function importProfileFromJson(jsonStr: string): LearnerProfile {
   if (!p.name || typeof p.name !== 'string') {
     throw new Error("Missing or invalid 'name' in profile data.");
   }
-  if (p.mode !== 'head' && p.mode !== 'hand') {
-    throw new Error("Invalid 'mode' (must be 'head' or 'hand').");
+  if (p.mode !== 'head' && p.mode !== 'hand' && p.mode !== 'eye') {
+    throw new Error("Invalid 'mode' (must be 'head', 'hand', or 'eye').");
   }
   if (!p.cursorMapping || typeof p.cursorMapping.gainX !== 'number') {
     throw new Error('Missing or corrupt cursorMapping configuration.');
@@ -94,6 +100,16 @@ export function importProfileFromJson(jsonStr: string): LearnerProfile {
     throw new Error("Profile must include calibrated bindings for 'select', 'grab', and 'pause'.");
   }
 
+  // Eye mode requires a valid GazeModel
+  if (p.mode === 'eye') {
+    if (!p.gaze || !p.gaze.weightsX || !p.gaze.weightsY || !p.gaze.featureMean) {
+      throw new Error("Profile in 'eye' mode requires a valid fitted GazeModel ('gaze' property).");
+    }
+  }
+
+  // Version migration
+  const _oldVersion = p.version ?? 1;
+
   // Ensure fresh unique ID and timestamp if imported
   const importedProfile: LearnerProfile = {
     id: 'prof_' + Math.random().toString(36).substring(2, 9),
@@ -101,10 +117,14 @@ export function importProfileFromJson(jsonStr: string): LearnerProfile {
     mode: p.mode,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    version: p.version ?? 1,
+    version: CURRENT_PROFILE_VERSION,
     cursorMapping: p.cursorMapping,
     restBaseline: p.restBaseline ?? ({} as any),
     commands: p.commands,
+    gaze: p.gaze,
+    largeTargetMode: p.largeTargetMode ?? false,
+    dwellSelectionEnabled: p.dwellSelectionEnabled ?? false,
+    dwellTimeMs: p.dwellTimeMs ?? 1000,
   };
 
   return importedProfile;

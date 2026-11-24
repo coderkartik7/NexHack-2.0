@@ -14,9 +14,12 @@ import { computeThresholds } from './thresholds';
 import { computeSeparability } from './separability';
 import { saveProfile, setActiveProfileId } from '../storage/profiles';
 
+import type { GazeModel } from '../gaze/types';
+
 export type WizardStep =
   | 'mode_and_name'
   | 'gesture_selection'
+  | 'gaze_calibration'
   | 'rest_baseline'
   | 'range_of_motion'
   | 'gesture_sampling'
@@ -29,6 +32,12 @@ export const HEAD_GESTURES: GestureOption[] = [
   { signal: 'browRaise', direction: 'high', label: 'Eyebrow Raise', description: 'Lift both eyebrows upward' },
   { signal: 'blink', direction: 'high', label: 'Extended Blink', description: 'Close both eyes firmly' },
   { signal: 'headRoll', direction: 'high', label: 'Head Tilt Right', description: 'Tilt head slightly to the right' },
+];
+
+export const EYE_GESTURES: GestureOption[] = [
+  { signal: 'jawOpen', direction: 'high', label: 'Jaw Open', description: 'Drop jaw downward without moving head' },
+  { signal: 'browRaise', direction: 'high', label: 'Eyebrow Raise', description: 'Lift eyebrows upward without moving head' },
+  { signal: 'blink', direction: 'high', label: 'Long Blink', description: 'Close both eyes firmly for calibrated duration' },
 ];
 
 export const HAND_GESTURES: GestureOption[] = [
@@ -61,6 +70,15 @@ export interface CalibrationWizardState {
   gestureReps: Record<CommandName, GestureSampleRep[]>;
   isRecordingRep: boolean;
   currentRepProgress: number; // 0 to 1
+
+  // Gaze Model calibration state
+  gazeModel: GazeModel | null;
+  largeTargetMode: boolean;
+  dwellSelectionEnabled: boolean;
+  dwellTimeMs: number;
+  naturalBlinkDurationMs: number;
+  setGazeCalibration: (model: GazeModel, largeTargetMode: boolean) => void;
+  setDwellSelection: (enabled: boolean, dwellMs?: number) => void;
 
   // Step 6: Computed bindings
   calibratedBindings: Record<CommandName, CommandBinding> | null;
@@ -152,6 +170,27 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
   calibratedBindings: null,
   savedProfileId: null,
 
+  gazeModel: null,
+  largeTargetMode: false,
+  dwellSelectionEnabled: false,
+  dwellTimeMs: 1000,
+  naturalBlinkDurationMs: 250,
+
+  setGazeCalibration: (model, largeTargetMode) => {
+    set({
+      gazeModel: model,
+      largeTargetMode,
+      currentStep: 'rest_baseline',
+    });
+  },
+
+  setDwellSelection: (enabled, dwellMs = 1000) => {
+    set({
+      dwellSelectionEnabled: enabled,
+      dwellTimeMs: dwellMs,
+    });
+  },
+
   setLearnerName: (learnerName) => set({ learnerName }),
 
   setInputMode: (mode) => {
@@ -162,6 +201,12 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
             select: HEAD_GESTURES[0],
             grab: HEAD_GESTURES[1],
             pause: HEAD_GESTURES[2],
+          }
+        : mode === 'eye'
+        ? {
+            select: EYE_GESTURES[0], // jawOpen
+            grab: EYE_GESTURES[1],   // browRaise
+            pause: EYE_GESTURES[2],  // long blink
           }
         : {
             select: HAND_GESTURES[0], // pinch
@@ -177,6 +222,22 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
 
   setCommandGesture: (command, gesture) => {
     const current = { ...get().selectedGestures };
+    // Prevent assigning the same gesture twice
+    for (const [cmd, g] of Object.entries(current)) {
+      if (cmd !== command && g.signal === gesture.signal) {
+        // Find an unused gesture from options
+        const pool =
+          get().inputMode === 'eye'
+            ? EYE_GESTURES
+            : get().inputMode === 'head'
+            ? HEAD_GESTURES
+            : HAND_GESTURES;
+        const replacement = pool.find((opt) => opt.signal !== gesture.signal);
+        if (replacement) {
+          current[cmd as CommandName] = replacement;
+        }
+      }
+    }
     current[command] = gesture;
     set({ selectedGestures: current });
   },
@@ -185,17 +246,60 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
 
   nextStep: () => {
     const curr = get().currentStep;
+    const isEye = get().inputMode === 'eye';
+    
+    // In eye mode, after gesture_selection we go to gaze_calibration, then rest_baseline, then gesture_sampling (skipping range_of_motion)
+    if (isEye) {
+      if (curr === 'gesture_selection') {
+        set({ currentStep: 'gaze_calibration' });
+        return;
+      }
+      if (curr === 'gaze_calibration') {
+        set({ currentStep: 'rest_baseline' });
+        return;
+      }
+      if (curr === 'rest_baseline') {
+        set({ currentStep: 'gesture_sampling' });
+        return;
+      }
+    }
+
     const idx = STEP_ORDER.indexOf(curr);
     if (idx < STEP_ORDER.length - 1) {
-      set({ currentStep: STEP_ORDER[idx + 1] });
+      let next = STEP_ORDER[idx + 1];
+      if (isEye && next === 'range_of_motion') {
+        next = 'gesture_sampling';
+      }
+      set({ currentStep: next });
     }
   },
 
   prevStep: () => {
     const curr = get().currentStep;
+    const isEye = get().inputMode === 'eye';
+
+    if (isEye) {
+      if (curr === 'gaze_calibration') {
+        set({ currentStep: 'gesture_selection' });
+        return;
+      }
+      if (curr === 'rest_baseline') {
+        set({ currentStep: 'gaze_calibration' });
+        return;
+      }
+      if (curr === 'gesture_sampling') {
+        set({ currentStep: 'rest_baseline' });
+        return;
+      }
+    }
+
     const idx = STEP_ORDER.indexOf(curr);
     if (idx > 0) {
-      set({ currentStep: STEP_ORDER[idx - 1] });
+      let prev = STEP_ORDER[idx - 1];
+      if (isEye && prev === 'range_of_motion') {
+        prev = 'rest_baseline';
+      }
+      set({ currentStep: prev });
     }
   },
 
@@ -217,10 +321,32 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
     for (const [key, samples] of Object.entries(buffer)) {
       baseline[key as SignalName] = computeSignalStats(samples);
     }
+
+    // Measure natural blink duration from rest buffer if available
+    let naturalBlinkDurationMs = 250;
+    const blinkSamples = buffer.blink || [];
+    if (blinkSamples.length > 0) {
+      // Find continuous episodes of blink > 0.5
+      let maxDurationFrames = 0;
+      let curFrames = 0;
+      for (const val of blinkSamples) {
+        if (val > 0.4) {
+          curFrames++;
+          if (curFrames > maxDurationFrames) maxDurationFrames = curFrames;
+        } else {
+          curFrames = 0;
+        }
+      }
+      if (maxDurationFrames > 0) {
+        naturalBlinkDurationMs = Math.round(maxDurationFrames * 33); // ~33ms per frame
+      }
+    }
+
     set({
       restBaseline: baseline as Record<SignalName, SignalSummaryStats>,
       isRecordingRest: false,
       restProgress: 1,
+      naturalBlinkDurationMs,
     });
   },
 
@@ -300,7 +426,7 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
   },
 
   computeAllThresholds: () => {
-    const { restBaseline, restBuffer, selectedGestures, gestureReps } = get();
+    const { restBaseline, restBuffer, selectedGestures, gestureReps, naturalBlinkDurationMs } = get();
     if (!restBaseline) return;
 
     const commands: CommandName[] = ['select', 'grab', 'pause'];
@@ -312,7 +438,13 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
       const reps = gestureReps[cmd] || [];
       const restSamples = restBuffer[gesture.signal] || [];
 
-      const thresholdResult = computeThresholds(stats, gesture.direction, reps);
+      const thresholdResult = computeThresholds(
+        stats,
+        gesture.direction,
+        reps,
+        gesture.signal,
+        naturalBlinkDurationMs
+      );
       const separabilityResult = computeSeparability(
         stats,
         restSamples,
@@ -348,6 +480,10 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
       cursorMapping,
       restBaseline,
       calibratedBindings,
+      gazeModel,
+      largeTargetMode,
+      dwellSelectionEnabled,
+      dwellTimeMs,
     } = get();
 
     const profile: LearnerProfile = {
@@ -356,7 +492,7 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
       mode: inputMode,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      version: 1,
+      version: 2,
       cursorMapping: cursorMapping ?? {
         gainX: 1.5,
         gainY: 1.5,
@@ -365,6 +501,10 @@ export const useCalibrationStore = create<CalibrationWizardState>((set, get) => 
       },
       restBaseline: restBaseline ?? ({} as any),
       commands: calibratedBindings!,
+      gaze: gazeModel ?? undefined,
+      largeTargetMode,
+      dwellSelectionEnabled,
+      dwellTimeMs,
     };
 
     await saveProfile(profile);

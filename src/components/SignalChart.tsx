@@ -6,6 +6,7 @@ interface SignalChartProps {
   min?: number;
   max?: number;
   color?: string;
+  unit?: string;
   historyLength?: number;
 }
 
@@ -14,7 +15,8 @@ export const SignalChart: React.FC<SignalChartProps> = ({
   value,
   min = -1,
   max = 1,
-  color = '#38bdf8',
+  color = '#2dd4bf', // default crisp teal
+  unit,
   historyLength = 200, // ~10 seconds at 20-30 FPS
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -42,8 +44,8 @@ export const SignalChart: React.FC<SignalChartProps> = ({
       const height = canvas.height;
       ctx.clearRect(0, 0, width, height);
 
-      // Draw grid lines
-      ctx.strokeStyle = '#334155';
+      // Draw subtle baseline grid line
+      ctx.strokeStyle = '#27272a'; // zinc-800
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 4]);
 
@@ -58,7 +60,7 @@ export const SignalChart: React.FC<SignalChartProps> = ({
       const history = historyRef.current;
       if (history.length > 1) {
         ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
 
         const range = max - min || 1;
@@ -88,19 +90,26 @@ export const SignalChart: React.FC<SignalChartProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [color, min, max, historyLength]);
 
+  const hasVal = value !== null && !isNaN(value);
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5">
+    <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-md p-2.5 flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-xs">
-        <span className="font-semibold text-slate-300">{label}</span>
-        <span className="font-mono text-cyan-400 font-medium">
-          {value !== null ? value.toFixed(3) : 'null'}
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="font-medium text-zinc-300 truncate">{label}</span>
+          {unit && (
+            <span className="text-[10px] font-mono text-zinc-400">({unit})</span>
+          )}
+        </div>
+        <span className="font-mono text-xs font-semibold text-teal-400">
+          {hasVal ? value.toFixed(3) : '--'}
         </span>
       </div>
       <canvas
         ref={canvasRef}
         width={240}
-        height={60}
-        className="w-full h-15 bg-slate-950/60 rounded-md"
+        height={56}
+        className="w-full h-14 bg-zinc-900/60 rounded border border-zinc-900"
       />
     </div>
   );

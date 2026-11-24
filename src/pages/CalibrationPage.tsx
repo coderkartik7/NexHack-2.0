@@ -3,6 +3,7 @@ import { CalibrationWizard } from '../components/CalibrationWizard';
 import { ProfileManager } from '../components/ProfileManager';
 import { CameraView } from '../components/CameraView';
 import { useCalibrationStore } from '../calibration/store';
+import { ArrowLeft, Video } from 'lucide-react';
 
 export const CalibrationPage: React.FC = () => {
   const [isWizardActive, setIsWizardActive] = useState(false);
@@ -19,35 +20,41 @@ export const CalibrationPage: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
-      {/* Top Section */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
-          <h1 className="text-2xl font-black text-white">Learner Calibration & Customization</h1>
-          <p className="text-sm text-slate-400">
-            Per-learner baseline adaptation, hysteresis thresholding, and input mapping
+          <h1 className="text-xl font-semibold text-zinc-100 tracking-tight">Learner Calibration & Profiles</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Individual resting baseline estimation, range of motion mapping, and hysteresis thresholds
           </p>
         </div>
 
         {isWizardActive && (
           <button
             onClick={() => setIsWizardActive(false)}
-            className="text-xs font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg"
+            className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-md transition-colors self-start sm:self-auto"
           >
-            Back to Profiles
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Return to Profiles
           </button>
         )}
       </div>
 
       {isWizardActive ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          <div className="lg:col-span-1">
-            <CameraView showLandmarks={true} />
-            <div className="mt-4 bg-slate-900/60 border border-slate-800 rounded-xl p-4 text-xs text-slate-400">
-              <span className="font-bold text-slate-200 block mb-1">Webcam Monitoring</span>
-              Keep your face or hand comfortably centered within frame during calibration.
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-4 flex flex-col gap-3">
+            <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900/60 p-3 flex flex-col gap-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
+                <Video className="w-3.5 h-3.5 text-teal-400" />
+                <span>Webcam Telemetry Feed</span>
+              </div>
+              <CameraView showLandmarks={true} />
+              <p className="text-[11px] text-zinc-400 font-mono leading-relaxed mt-1">
+                Maintain your face or hand comfortably within the viewfinder during calibration steps.
+              </p>
             </div>
           </div>
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-8">
             <CalibrationWizard onComplete={handleWizardComplete} />
           </div>
         </div>

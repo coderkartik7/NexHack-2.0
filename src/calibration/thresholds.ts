@@ -28,7 +28,9 @@ export interface CalibratedThresholds {
 export function computeThresholds(
   restStats: SignalSummaryStats,
   direction: GestureDirection,
-  sampleReps: GestureSampleRep[]
+  sampleReps: GestureSampleRep[],
+  signalName?: string,
+  measuredBlinkDurationMs?: number
 ): CalibratedThresholds {
   const isHigh = direction === 'high';
 
@@ -64,16 +66,24 @@ export function computeThresholds(
   const exit = isHigh ? exitTransformed : -exitTransformed;
 
   // Timing thresholds
-  const minHoldMs = clamp(
+  let minHoldMs = clamp(
     Math.round(THRESHOLD_CONFIG.MIN_HOLD_RATIO * medianDuration),
     THRESHOLD_CONFIG.MIN_HOLD_LOWER_BOUND,
     THRESHOLD_CONFIG.MIN_HOLD_UPPER_BOUND
   );
 
+  // If gesture is blink-based, enforce minHoldMs > natural blink duration
+  if (signalName === 'blink') {
+    const naturalBlinkThreshold = measuredBlinkDurationMs
+      ? measuredBlinkDurationMs + 100
+      : 450; // standard natural blink is 100-400ms, long blink must exceed
+    minHoldMs = Math.max(minHoldMs, naturalBlinkThreshold);
+  }
+
   const cooldownMs = clamp(
     Math.round(1.0 * minHoldMs + THRESHOLD_CONFIG.COOLDOWN_OFFSET),
     THRESHOLD_CONFIG.COOLDOWN_LOWER_BOUND,
-    THRESHOLD_CONFIG.COOLDOWN_UPPER_BOUND
+    THRESHOLD_CONFIG.COOLDOWN_UPPER_BOUND + (signalName === 'blink' ? 200 : 0)
   );
 
   return {

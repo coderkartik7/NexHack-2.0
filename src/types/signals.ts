@@ -12,11 +12,19 @@ export type HandSignalName =
   | 'pinch'
   | 'openPalm';
 
-export type SignalName = HeadSignalName | HandSignalName;
+export type EyeSignalName =
+  | 'gazeX'
+  | 'gazeY'
+  | 'irisDistL'
+  | 'irisDistR'
+  | 'eyeOpenness';
+
+export type SignalName = HeadSignalName | HandSignalName | EyeSignalName;
 
 export interface QualityMetrics {
   face: number;
   hand: number;
+  eye?: number;
 }
 
 export interface SignalFrame {
@@ -25,7 +33,7 @@ export interface SignalFrame {
   signals: Record<SignalName, number | null>;
 }
 
-export type InputMode = 'head' | 'hand';
+export type InputMode = 'head' | 'hand' | 'eye';
 
 export interface CameraState {
   isStreaming: boolean;
