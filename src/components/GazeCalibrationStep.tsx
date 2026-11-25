@@ -5,7 +5,7 @@ import { fitGazeModel, type CalibrationSample } from '../gaze/model';
 import { computeValidationAccuracy, type ValidationEvaluation } from '../gaze/accuracy';
 import type { GazeModel, GazeFeatureExtractionResult } from '../gaze/types';
 import { GazeValidation } from './GazeValidation';
-import { Compass, ArrowRight, Eye, ShieldCheck, AlertCircle, RefreshCw, FastForward } from 'lucide-react';
+import { Compass, ArrowRight, Eye, AlertCircle, RefreshCw, FastForward } from 'lucide-react';
 
 interface GazeCalibrationStepProps {
   onComplete: (model: GazeModel, largeTargetMode: boolean) => void;
@@ -77,20 +77,21 @@ export const GazeCalibrationStep: React.FC<GazeCalibrationStepProps> = ({
   const [trackingQuality, setTrackingQuality] = useState(0);
   const [rejectionReason, setRejectionReason] = useState<string>('Align face');
   const [validFramesCount, setValidFramesCount] = useState(0);
-  const [pointTimeoutSeconds, setPointTimeoutSeconds] = useState(8);
+  const [_pointTimeoutSeconds, setPointTimeoutSeconds] = useState(8);
   const [pointTimedOut, setPointTimedOut] = useState(false);
   const [cameraStalled, setCameraStalled] = useState(false);
   const [isLenientMode, setIsLenientMode] = useState(false);
 
   // Collected Samples persisted
-  const samplesRef = useRef<CalibrationSample[]>(() => {
+  const samplesRef = useRef<CalibrationSample[]>([]);
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SAMPLES);
-      return saved ? JSON.parse(saved) || [] : [];
-    } catch {
-      return [];
-    }
-  });
+      if (saved) {
+        samplesRef.current = JSON.parse(saved) || [];
+      }
+    } catch {}
+  }, []);
   const currentBufferRef = useRef<number[][]>([]);
   const fittedModelRef = useRef<GazeModel | null>(null);
   const lastSignalTimeRef = useRef<number>(performance.now());
@@ -99,7 +100,7 @@ export const GazeCalibrationStep: React.FC<GazeCalibrationStepProps> = ({
   const TARGET_FRAMES = isLenientMode ? 15 : 30;
 
   const logTransition = useCallback((from: string, to: string, detail?: string) => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (import.meta.env.DEV) {
       console.log(`[GazeCalibration] ${from} -> ${to}${detail ? ` (${detail})` : ''}`);
     }
   }, []);
@@ -206,8 +207,8 @@ export const GazeCalibrationStep: React.FC<GazeCalibrationStepProps> = ({
     setPointTimedOut(false);
     setPointTimeoutSeconds(isLenientMode ? 12 : 8);
 
-    let pointTimer: NodeJS.Timeout | null = null;
-    let collectInterval: NodeJS.Timeout | null = null;
+    let pointTimer: ReturnType<typeof setTimeout> | null = null;
+    let collectInterval: ReturnType<typeof setInterval> | null = null;
     let unsubPipeline: (() => void) | null = null;
 
     // Settle for 600ms

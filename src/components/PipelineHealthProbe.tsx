@@ -47,12 +47,12 @@ export const PipelineHealthProbe: React.FC<PipelineHealthProbeProps> = ({
 
   const {
     currentFrame,
-    latestGazeResult,
+    latestGazeResult: _latestGazeResult,
     fps,
     inputMode,
-    isStreaming,
-    isLoadingModels,
-    error,
+    isStreaming: _isStreaming,
+    isLoadingModels: _isLoadingModels,
+    error: _error,
     lastDetectionTimestamp,
     activeSourceId,
     sourceStarted,
@@ -105,7 +105,6 @@ export const PipelineHealthProbe: React.FC<PipelineHealthProbeProps> = ({
 
   // 1. Camera stream active
   const videoEl = visionPipeline.getVideoElement();
-  const stream = cameraService.getStream();
   const streamActive = cameraService.isActive();
   const videoWidth = videoEl?.videoWidth ?? 0;
   const videoHeight = videoEl?.videoHeight ?? 0;

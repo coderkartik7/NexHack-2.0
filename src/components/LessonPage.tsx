@@ -31,10 +31,9 @@ import { DraggableLabel } from './DraggableLabel';
 import { GestureCursor } from './GestureCursor';
 import { StatusChip } from './StatusChip';
 import { Toasts, type ToastMessage } from './Toasts';
-import { ControlBar } from './ControlBar';
 import { ScrollZones } from './ScrollZones';
 
-import { CheckCircle, RotateCcw, Download, AlertCircle, Sliders, ChevronDown, ChevronUp } from 'lucide-react';
+import { RotateCcw, Download, AlertCircle, Sliders, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface LessonPageProps {
   onNavigateToCalibration?: () => void;
@@ -49,7 +48,7 @@ export const LessonPage: React.FC<LessonPageProps> = ({
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
   const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
   const [sourceType, setSourceType] = useState<'live' | 'mouse_sim' | 'replay'>('live');
-  const [isRestTestMode, setIsRestTestMode] = useState(false);
+  const [_isRestTestMode] = useState(false);
 
   // 2. Lesson Store State
   const lessonStoreRef = useRef<LessonStore>(new LessonStore());
@@ -68,7 +67,7 @@ export const LessonPage: React.FC<LessonPageProps> = ({
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [engineFrameCount, setEngineFrameCount] = useState(0);
   const engineFrameCountRef = useRef(0);
-  const [lastFrameTime, setLastFrameTime] = useState(performance.now());
+  const [_lastFrameTime, _setLastFrameTime] = useState(performance.now());
   const lastFrameTimeRef = useRef(performance.now());
   const [stallWarning, setStallWarning] = useState<string | null>(null);
 
