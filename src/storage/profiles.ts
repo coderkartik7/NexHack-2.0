@@ -3,8 +3,68 @@ import type { LearnerProfile } from '../calibration/types';
 
 const ACTIVE_PROFILE_KEY = 'gesturelearn_active_profile_id';
 
+export function createDefaultLearnerProfile(mode: 'head' | 'hand' = 'head'): LearnerProfile {
+  return {
+    id: `prof_default_${mode}`,
+    name: `Default ${mode === 'head' ? 'Head Control' : 'Hand Control'}`,
+    mode,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 2,
+    cursorMapping: {
+      gainX: 1.5,
+      gainY: 1.5,
+      offsetX: mode === 'head' ? 0 : 0.5,
+      offsetY: mode === 'head' ? 0 : 0.5,
+    },
+    restBaseline: {
+      mean: { headX: 0, headY: 0, jawOpen: 0.05, browRaise: 0.05, blink: 0.05, handX: 0.5, handY: 0.5, pinch: 0.8, openPalm: 1.0 },
+      std: { headX: 0.02, headY: 0.02, jawOpen: 0.01, browRaise: 0.01, blink: 0.01, handX: 0.02, handY: 0.02, pinch: 0.02, openPalm: 0.02 },
+      p95: { headX: 0.04, headY: 0.04, jawOpen: 0.08, browRaise: 0.08, blink: 0.08, handX: 0.54, handY: 0.54, pinch: 0.84, openPalm: 1.04 },
+      durationMs: 15000,
+      sampleCount: 450,
+    },
+    commands: {
+      select: {
+        signal: mode === 'head' ? 'jawOpen' : 'pinch',
+        direction: mode === 'head' ? 'high' : 'low',
+        enter: mode === 'head' ? 0.35 : 0.28,
+        exit: mode === 'head' ? 0.2 : 0.45,
+        minHoldMs: 150,
+        cooldownMs: 200,
+        separability: { dPrime: 2.5, overlap: 0.05, rating: 'reliable' },
+      },
+      grab: {
+        signal: mode === 'head' ? 'browRaise' : 'openPalm',
+        direction: 'high',
+        enter: mode === 'head' ? 0.35 : 1.35,
+        exit: mode === 'head' ? 0.2 : 1.15,
+        minHoldMs: 150,
+        cooldownMs: 200,
+        separability: { dPrime: 2.5, overlap: 0.05, rating: 'reliable' },
+      },
+      pause: {
+        signal: 'blink',
+        direction: 'high',
+        enter: 0.8,
+        exit: 0.4,
+        minHoldMs: 300,
+        cooldownMs: 300,
+        separability: { dPrime: 2.5, overlap: 0.05, rating: 'reliable' },
+      },
+    },
+  };
+}
+
 export async function listProfiles(): Promise<LearnerProfile[]> {
-  return await db.profiles.orderBy('updatedAt').reverse().toArray();
+  const profiles = await db.profiles.orderBy('updatedAt').reverse().toArray();
+  if (profiles.length === 0) {
+    const defaultProfile = createDefaultLearnerProfile('head');
+    await db.profiles.put(defaultProfile);
+    setActiveProfileId(defaultProfile.id);
+    return [defaultProfile];
+  }
+  return profiles;
 }
 
 export async function getProfile(id: string): Promise<LearnerProfile | undefined> {
@@ -106,9 +166,6 @@ export function importProfileFromJson(jsonStr: string): LearnerProfile {
       throw new Error("Profile in 'eye' mode requires a valid fitted GazeModel ('gaze' property).");
     }
   }
-
-  // Version migration
-  const _oldVersion = p.version ?? 1;
 
   // Ensure fresh unique ID and timestamp if imported
   const importedProfile: LearnerProfile = {

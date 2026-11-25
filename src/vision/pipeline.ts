@@ -16,8 +16,12 @@ export interface PipelineStoreState {
   isLoadingModels: boolean;
   error: string | null;
   qualityWarning: string | null;
+  lastDetectionTimestamp: number | null;
+  activeSourceId: string;
+  sourceStarted: boolean;
   setInputMode: (mode: InputMode) => void;
   setError: (error: string | null) => void;
+  setSourceInfo: (sourceId: string, started: boolean) => void;
 }
 
 export const usePipelineStore = create<PipelineStoreState>((set) => ({
@@ -29,8 +33,12 @@ export const usePipelineStore = create<PipelineStoreState>((set) => ({
   isLoadingModels: false,
   error: null,
   qualityWarning: null,
+  lastDetectionTimestamp: null,
+  activeSourceId: 'live',
+  sourceStarted: false,
   setInputMode: (inputMode) => set({ inputMode }),
   setError: (error) => set({ error }),
+  setSourceInfo: (activeSourceId, sourceStarted) => set({ activeSourceId, sourceStarted }),
 }));
 
 type FrameSubscriber = (frame: SignalFrame) => void;
@@ -44,10 +52,14 @@ export class VisionPipeline {
   private lastFpsTimestamp = performance.now();
   private lowQualitySince: number | null = null;
   private videoElement: HTMLVideoElement | null = null;
+  private sharedVideoElement: HTMLVideoElement | null = null;
+  private refCount = 0;
+  private startPromise: Promise<void> | null = null;
 
   // Raw landmarker results for debug overlay
   public latestFaceResult: FaceLandmarkerResult | null = null;
   public latestHandResult: HandLandmarkerResult | null = null;
+  public latestGazeResult: GazeFeatureExtractionResult | null = null;
 
   constructor() {
     this.initFilters();
@@ -72,7 +84,6 @@ export class VisionPipeline {
       'eyeOpenness',
     ];
     for (const name of signalNames) {
-      // headX, headY, handX, handY benefit from slightly higher beta for quick cursor responsiveness with low lag
       const isCursor = name === 'headX' || name === 'headY' || name === 'handX' || name === 'handY';
       const isGaze = name === 'gazeX' || name === 'gazeY';
       this.filters.set(
@@ -93,31 +104,107 @@ export class VisionPipeline {
     };
   }
 
+  /**
+   * Acquire camera/pipeline. Reference counted so multiple views (or unmount/remount in StrictMode)
+   * do not tear down or re-request media stream if already active.
+   */
+  async acquire(videoEl?: HTMLVideoElement | null): Promise<void> {
+    this.refCount++;
+    if (videoEl) {
+      this.attachVideoElement(videoEl);
+    }
+    if (this.startPromise) {
+      return this.startPromise;
+    }
+    if (usePipelineStore.getState().isStreaming && cameraService.isActive()) {
+      return;
+    }
+    return this.start(videoEl ?? this.getOrCreateSharedVideo());
+  }
+
+  /**
+   * Release a reference. Stops camera when reference count reaches 0.
+   */
+  release(): void {
+    this.refCount = Math.max(0, this.refCount - 1);
+    if (this.refCount === 0) {
+      this.stop();
+    }
+  }
+
+  getRefCount(): number {
+    return this.refCount;
+  }
+
+  getVideoElement(): HTMLVideoElement | null {
+    return this.videoElement;
+  }
+
+  getOrCreateSharedVideo(): HTMLVideoElement {
+    if (!this.sharedVideoElement && typeof document !== 'undefined') {
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      video.style.position = 'fixed';
+      video.style.top = '-9999px';
+      video.style.left = '-9999px';
+      video.style.width = '640px';
+      video.style.height = '480px';
+      video.style.opacity = '0';
+      video.style.pointerEvents = 'none';
+      video.id = 'gesturelearn-shared-hidden-video';
+      document.body.appendChild(video);
+      this.sharedVideoElement = video;
+    }
+    return this.sharedVideoElement || (this.videoElement as HTMLVideoElement);
+  }
+
+  attachVideoElement(videoEl: HTMLVideoElement): void {
+    if (this.videoElement === videoEl) return;
+    this.videoElement = videoEl;
+    const stream = cameraService.getStream();
+    if (stream && videoEl.srcObject !== stream) {
+      videoEl.srcObject = stream;
+      videoEl.play().catch(() => {});
+    }
+  }
+
   async start(videoElement: HTMLVideoElement): Promise<void> {
     this.videoElement = videoElement;
+    if (this.startPromise) {
+      return this.startPromise;
+    }
+
     usePipelineStore.setState({ isLoadingModels: true, error: null });
 
-    try {
-      // 1. Initialize landmarkers (singleton)
-      await landmarkersService.init();
-      usePipelineStore.setState({ isLoadingModels: false });
+    this.startPromise = (async () => {
+      try {
+        // 1. Initialize landmarkers (singleton)
+        await landmarkersService.init();
+        usePipelineStore.setState({ isLoadingModels: false });
 
-      // 2. Start camera
-      await cameraService.start(videoElement);
-      usePipelineStore.setState({ isStreaming: true });
+        // 2. Start camera
+        await cameraService.start(videoElement);
+        usePipelineStore.setState({ isStreaming: true });
 
-      // 3. Start processing loop
-      this.lastVideoTime = -1;
-      this.startLoop();
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      usePipelineStore.setState({
-        error: errorMsg,
-        isLoadingModels: false,
-        isStreaming: false,
-      });
-      throw err;
-    }
+        // 3. Start processing loop
+        this.lastVideoTime = -1;
+        this.startLoop();
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        usePipelineStore.setState({
+          error: errorMsg,
+          isLoadingModels: false,
+          isStreaming: false,
+        });
+        throw err;
+      } finally {
+        this.startPromise = null;
+      }
+    })();
+
+    return this.startPromise;
   }
 
   stop(): void {
@@ -128,7 +215,15 @@ export class VisionPipeline {
     cameraService.stop();
     this.latestFaceResult = null;
     this.latestHandResult = null;
+    this.latestGazeResult = null;
     this.lowQualitySince = null;
+    this.refCount = 0;
+    this.startPromise = null;
+
+    if (this.sharedVideoElement && this.sharedVideoElement.parentNode) {
+      this.sharedVideoElement.parentNode.removeChild(this.sharedVideoElement);
+      this.sharedVideoElement = null;
+    }
 
     // Reset filters
     this.filters.forEach((filter) => filter.reset());
@@ -137,13 +232,14 @@ export class VisionPipeline {
       isStreaming: false,
       fps: 0,
       qualityWarning: null,
+      currentFrame: null,
+      latestGazeResult: null,
     });
   }
 
   private startLoop(): void {
     const loop = () => {
       if (document.hidden) {
-        // Stop or pause processing when document is hidden to conserve power and avoid invalid timestamps
         this.animationFrameId = requestAnimationFrame(loop);
         return;
       }
@@ -193,6 +289,7 @@ export class VisionPipeline {
         gazeOut
       );
       if (gazeOut.result) {
+        this.latestGazeResult = gazeOut.result;
         usePipelineStore.setState({ latestGazeResult: gazeOut.result });
       }
 
@@ -217,7 +314,13 @@ export class VisionPipeline {
       };
 
       // Quality evaluation
-      const qualityScore = mode === 'head' ? rawFrame.quality.face : rawFrame.quality.hand;
+      const qualityScore =
+        mode === 'head'
+          ? rawFrame.quality.face
+          : mode === 'eye'
+          ? (rawFrame.quality.eye ?? rawFrame.quality.face)
+          : rawFrame.quality.hand;
+
       let warning: string | null = null;
       if (qualityScore < 0.25) {
         if (this.lowQualitySince === null) {
@@ -226,6 +329,8 @@ export class VisionPipeline {
           warning =
             mode === 'head'
               ? 'Face not clearly visible (Move closer or ensure good lighting)'
+              : mode === 'eye'
+              ? 'Eyes/Face not clearly visible'
               : 'Hand not clearly visible in camera frame';
         }
       } else {
@@ -247,6 +352,7 @@ export class VisionPipeline {
         currentFrame: smoothedFrame,
         fps: currentFps,
         qualityWarning: warning,
+        lastDetectionTimestamp: timestampMs,
       });
 
       // Notify external subscribers

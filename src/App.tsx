@@ -3,10 +3,12 @@ import { DebugPage } from './pages/DebugPage';
 import { CalibrationPage } from './pages/CalibrationPage';
 import { LessonPage } from './components/LessonPage';
 import { StudyPage } from './components/StudyPage';
-import { Activity, Sliders, ShieldCheck, BookOpen, BarChart3 } from 'lucide-react';
+import { HealthPage } from './pages/HealthPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { Activity, Sliders, ShieldCheck, BookOpen, BarChart3, Stethoscope } from 'lucide-react';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'study' | 'lesson' | 'debug' | 'calibration'>('study');
+  const [activeTab, setActiveTab] = useState<'study' | 'lesson' | 'debug' | 'calibration' | 'health'>('study');
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-teal-500/20 selection:text-teal-200">
@@ -72,37 +74,56 @@ export function App() {
               <Sliders className="w-3.5 h-3.5 text-teal-400" />
               Calibration & Profiles
             </button>
+            <button
+              onClick={() => setActiveTab('health')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === 'health'
+                  ? 'bg-zinc-800 text-teal-300 shadow-xs border border-zinc-700/60'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Stethoscope className="w-3.5 h-3.5 text-teal-400" />
+              Health Probe
+            </button>
           </nav>
 
           {/* Privacy badge */}
           <div className="hidden md:flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Local Vision Sandbox</span>
+            <span>Zero-Cloud Edge AI</span>
           </div>
         </div>
       </header>
 
       {/* Main Content View */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
-        {activeTab === 'study' ? (
-          <StudyPage />
-        ) : activeTab === 'lesson' ? (
-          <LessonPage
-            onNavigateToCalibration={() => setActiveTab('calibration')}
-            onNavigateToProfiles={() => setActiveTab('calibration')}
-          />
-        ) : activeTab === 'debug' ? (
-          <DebugPage />
-        ) : (
-          <CalibrationPage />
-        )}
+        <ErrorBoundary fallbackTitle="An error occurred in this view">
+          {activeTab === 'study' ? (
+            <StudyPage />
+          ) : activeTab === 'lesson' ? (
+            <LessonPage
+              onNavigateToCalibration={() => setActiveTab('calibration')}
+              onNavigateToProfiles={() => setActiveTab('calibration')}
+            />
+          ) : activeTab === 'debug' ? (
+            <DebugPage />
+          ) : activeTab === 'calibration' ? (
+            <CalibrationPage />
+          ) : (
+            <HealthPage onBack={() => setActiveTab('lesson')} />
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Grounded Utility Footer */}
-      <footer className="border-t border-zinc-900 bg-zinc-950 py-3 text-xs text-zinc-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-2">
-          <span>Client-side inference via MediaPipe &middot; 1€ adaptive velocity filtering</span>
-          <span className="font-mono text-[11px] text-zinc-600">Zero cloud streaming &middot; IndexedDB isolated</span>
+      <footer className="border-t border-zinc-800/80 bg-zinc-950 py-3 text-[11px] text-zinc-400 font-mono">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div>GestureLearn Assistive Engine &middot; Phase 7 Production Build</div>
+          <div className="flex items-center gap-4 text-zinc-400">
+            <span>MediaPipe WASM Engine</span>
+            <span>1€ Adaptive Filter</span>
+            <span>Local IndexedDB</span>
+          </div>
         </div>
       </footer>
     </div>

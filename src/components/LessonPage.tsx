@@ -21,7 +21,9 @@ import { db } from '../storage/db';
 import type { LearnerProfile } from '../calibration/types';
 import { createTargetResolverForProfile } from '../lesson/targeting';
 import { GazeDebugOverlay } from './GazeDebugOverlay';
-import { visionPipeline } from '../vision/pipeline';
+import { visionPipeline, usePipelineStore } from '../vision/pipeline';
+import { computeInputStatus } from '../pipeline/statusSelector';
+import { PipelineHealthProbe } from './PipelineHealthProbe';
 
 import { QuestionCard } from './QuestionCard';
 import { DiagramPanel } from './DiagramPanel';
@@ -32,7 +34,7 @@ import { Toasts, type ToastMessage } from './Toasts';
 import { ControlBar } from './ControlBar';
 import { ScrollZones } from './ScrollZones';
 
-import { CheckCircle, RotateCcw, Download, AlertCircle } from 'lucide-react';
+import { CheckCircle, RotateCcw, Download, AlertCircle, Sliders, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface LessonPageProps {
   onNavigateToCalibration?: () => void;
@@ -45,6 +47,7 @@ export const LessonPage: React.FC<LessonPageProps> = ({
 }) => {
   // 1. Core Profile & Sources
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
+  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
   const [sourceType, setSourceType] = useState<'live' | 'mouse_sim' | 'replay'>('live');
   const [isRestTestMode, setIsRestTestMode] = useState(false);
 
@@ -60,6 +63,14 @@ export const LessonPage: React.FC<LessonPageProps> = ({
   const sourceRef = useRef<SignalSource | null>(null);
   const targetResolverRef = useRef<TargetResolver>(new TargetResolver());
   const scrollControllerRef = useRef<ScrollController>(new ScrollController());
+
+  // Diagnostics & Watchdog
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [engineFrameCount, setEngineFrameCount] = useState(0);
+  const engineFrameCountRef = useRef(0);
+  const [lastFrameTime, setLastFrameTime] = useState(performance.now());
+  const lastFrameTimeRef = useRef(performance.now());
+  const [stallWarning, setStallWarning] = useState<string | null>(null);
 
   // Gaze HUD & Dwell Selection state
   const [showGazeHud, setShowGazeHud] = useState(false);
@@ -139,13 +150,15 @@ export const LessonPage: React.FC<LessonPageProps> = ({
   // Load active profile from storage
   useEffect(() => {
     (async () => {
-      const activeId = getActiveProfileId();
       const profiles = await listProfiles();
+      const activeId = getActiveProfileId();
       const current = profiles.find((p) => p.id === activeId) || profiles[0] || null;
       if (current) {
         setProfile(current);
         loggerRef.current.setProfileId(current.id);
+        usePipelineStore.getState().setInputMode(current.mode);
       }
+      setHasLoadedProfile(true);
     })();
   }, []);
 
@@ -159,13 +172,18 @@ export const LessonPage: React.FC<LessonPageProps> = ({
 
   // Initialize IntentEngine & IntentCursor / GazeCursor
   useEffect(() => {
+    if (!profile) return;
+
+    // Automatically synchronize pipeline inputMode with active profile
+    usePipelineStore.getState().setInputMode(profile.mode);
+
     const engine = new IntentEngine(commandBus, profile);
     engineRef.current = engine;
 
     const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
     const h = typeof window !== 'undefined' ? window.innerHeight : 768;
 
-    if (profile?.mode === 'eye') {
+    if (profile.mode === 'eye') {
       gazeCursorRef.current = new GazeCursor({ viewportWidth: w, viewportHeight: h }, profile);
       cursorRef.current = null;
     } else {
@@ -186,6 +204,34 @@ export const LessonPage: React.FC<LessonPageProps> = ({
       window.removeEventListener('resize', handleResize);
     };
   }, [profile]);
+
+  // Watchdog: detect frame stall > 1.0s and update engine frames/sec
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setEngineFrameCount(engineFrameCountRef.current);
+      engineFrameCountRef.current = 0;
+
+      const elapsedSinceFrame = performance.now() - lastFrameTimeRef.current;
+      if (sourceRef.current?.isActive() && elapsedSinceFrame > 1000) {
+        const mode = profile?.mode ?? 'head';
+        const isLive = sourceType === 'live';
+        if (isLive) {
+          const streaming = usePipelineStore.getState().isStreaming;
+          if (!streaming) {
+            setStallWarning('Camera stopped / initializing');
+          } else {
+            setStallWarning(mode === 'head' ? 'No face detected in camera' : mode === 'eye' ? 'Eyes not detected' : 'No hand detected in camera');
+          }
+        } else {
+          setStallWarning('Input source stalled');
+        }
+      } else {
+        setStallWarning(null);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [profile, sourceType]);
 
   // Keyboard fallbacks (Space for pause, Ctrl+Z / Backspace for Undo)
   useEffect(() => {
@@ -242,7 +288,6 @@ export const LessonPage: React.FC<LessonPageProps> = ({
         const nextPaused = engineRef.current ? engineRef.current.getIsPaused() : !isPaused;
         setIsPaused(nextPaused);
         if (nextPaused) {
-          // Mid-drag cancel
           if (grabbedLabelId) {
             lessonStoreRef.current.cancelDrag();
             setIsGrabbing(false);
@@ -330,6 +375,9 @@ export const LessonPage: React.FC<LessonPageProps> = ({
     loggerRef.current.setSource(sourceType);
 
     const unsub = source.subscribe((frame) => {
+      lastFrameTimeRef.current = performance.now();
+      engineFrameCountRef.current++;
+
       // 1. Process in engine
       if (engineRef.current) {
         engineRef.current.processFrame(frame);
@@ -502,7 +550,6 @@ export const LessonPage: React.FC<LessonPageProps> = ({
         addToast('Placed in wrong zone. You can undo or move it.', 'warning');
       }
     } else {
-      // Returned to tray
       lessonStoreRef.current.cancelDrag();
       addToast('Dropped outside zone: returned to tray', 'info');
     }
@@ -524,7 +571,6 @@ export const LessonPage: React.FC<LessonPageProps> = ({
 
   const handleDownloadSession = async () => {
     const jsonStr = loggerRef.current.exportJson();
-    // Persist session to Dexie
     try {
       await db.sessions.put({
         id: loggerRef.current.getSessionId(),
@@ -553,16 +599,92 @@ export const LessonPage: React.FC<LessonPageProps> = ({
     addToast('Lesson activity reset', 'info');
   };
 
+  // Compute live input status
+  const pipelineStore = usePipelineStore();
+  const inputStatus = computeInputStatus({
+    sourceAlive: sourceRef.current?.isActive() ?? false,
+    sourceId: sourceType,
+    isStreaming: pipelineStore.isStreaming,
+    fps: pipelineStore.fps,
+    profile,
+    qualityFace: pipelineStore.currentFrame?.quality.face ?? 0,
+    qualityHand: pipelineStore.currentFrame?.quality.hand ?? 0,
+    qualityEye: pipelineStore.currentFrame?.quality.eye,
+    isPaused,
+    trackingLostSinceT: engineRef.current?.trackingLostSinceT ?? null,
+  });
+
+  // If no profile found after DB lookup, show blocking plain-language screen
+  if (hasLoadedProfile && !profile) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-8 bg-zinc-900 border border-zinc-800 rounded-2xl text-center space-y-4 shadow-xl">
+        <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-white">No Calibration Found</h2>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          The quiz requires a calibrated learner profile to translate your gestures and movements into cursor interactions.
+        </p>
+        <div className="pt-2">
+          <button
+            onClick={() => onNavigateToCalibration?.()}
+            className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium text-sm transition-colors shadow-lg shadow-teal-600/20 inline-flex items-center gap-2"
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Calibrate Now</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const cursorDiagnostics = cursorRef.current?.getState() || {
+    rawX: 0,
+    rawY: 0,
+    screenX: cursorPos.x,
+    screenY: cursorPos.y,
+    frozen: false,
+  };
+
   return (
     <div className="relative min-h-[140vh] pb-32 flex flex-col gap-6 max-w-5xl mx-auto">
+      {/* Visual Stall Banner if frames stop arriving > 1s */}
+      {stallWarning && (
+        <div className="bg-rose-950/90 border border-rose-600 text-rose-200 px-4 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>Input frame stall detected: {stallWarning}</span>
+          </div>
+          {sourceType === 'live' && (
+            <button
+              onClick={() => {
+                sourceRef.current?.start().catch(console.error);
+              }}
+              className="px-2.5 py-1 bg-rose-900 hover:bg-rose-800 text-rose-100 rounded text-xs font-mono font-bold"
+            >
+              Restart Pipeline
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Input Blocked Notice if blocked */}
+      {inputStatus.blockedReason && !stallWarning && (
+        <div className="bg-amber-950/70 border border-amber-700/80 text-amber-200 px-4 py-2 rounded-lg text-xs font-medium flex items-center gap-2 backdrop-blur-sm">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>Input Blocked: {inputStatus.blockedReason}</span>
+        </div>
+      )}
+
       {/* Top Telemetry & Control Bar */}
       <div className="sticky top-16 z-40 flex flex-col gap-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/80 p-2.5 rounded-lg border border-zinc-800 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <StatusChip
-              isTrackingOk={!isTrackingLost}
+              isTrackingOk={inputStatus.isTrackingOk}
               isPaused={isPaused}
               lastGestureName={lastGestureRecognized}
+              blockedReason={inputStatus.blockedReason}
               gazeRating={profile?.mode === 'eye' ? profile?.gaze?.validation?.meanErrorPx ? (profile.gaze.validation.meanErrorPx < 120 ? 'good' : profile.gaze.validation.meanErrorPx <= 200 ? 'fair' : 'poor') : 'fair' : null}
               gazeErrorPx={profile?.gaze?.validation?.meanErrorPx}
               onRecalibrate={() => onNavigateToCalibration?.()}
@@ -580,6 +702,19 @@ export const LessonPage: React.FC<LessonPageProps> = ({
                 Gaze HUD
               </button>
             )}
+
+            {/* Toggle On-Screen Diagnostics */}
+            <button
+              onClick={() => setShowDiagnostics((prev) => !prev)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-mono font-medium border transition-colors ${
+                showDiagnostics
+                  ? 'bg-teal-950 text-teal-300 border-teal-800'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <span>Probe</span>
+              {showDiagnostics ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
 
             {/* Signal Source Switcher */}
             <div className="flex bg-zinc-900 p-0.5 rounded-md border border-zinc-800 text-[11px] font-mono">
@@ -603,94 +738,57 @@ export const LessonPage: React.FC<LessonPageProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Rest Test Mode Toggle */}
             <button
-              onClick={() => {
-                const nextMode = isRestTestMode ? 'activity' : 'rest_test';
-                setIsRestTestMode(!isRestTestMode);
-                loggerRef.current.setMode(nextMode);
-                addToast(
-                  !isRestTestMode ? 'Rest test mode enabled (monitoring noise)' : 'Activity mode resumed',
-                  'info'
-                );
-              }}
+              id="btn_pause_toggle"
+              onClick={togglePause}
               className={`px-2.5 py-1 rounded text-xs font-mono font-medium border transition-colors ${
-                isRestTestMode
+                isPaused
                   ? 'bg-amber-950 text-amber-300 border-amber-800'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-zinc-100'
               }`}
             >
-              {isRestTestMode ? 'Rest Test Active' : 'Rest Test'}
+              {isPaused ? 'Resume (Space)' : 'Pause (Space)'}
             </button>
-
+            <button
+              id="btn_undo_action"
+              onClick={handleUndo}
+              disabled={!lessonStoreRef.current.canUndo()}
+              className="px-2.5 py-1 rounded text-xs font-mono font-medium border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-zinc-100 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            >
+              Undo (Ctrl+Z)
+            </button>
+            <button
+              onClick={handleResetLesson}
+              className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
+              title="Reset Lesson"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
             <button
               onClick={handleDownloadSession}
-              className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 rounded text-xs font-medium transition-colors"
+              className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
+              title="Export Session Log"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Log JSON</span>
+              <Download className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Global Control Bar */}
-        <ControlBar
-          isPaused={isPaused}
-          canUndo={lessonStoreRef.current.canUndo()}
-          isMuted={isMuted}
-          activeProfileName={profile?.name ?? 'Alex M. (Calibrated)'}
-          onTogglePause={togglePause}
-          onUndo={handleUndo}
-          onToggleMute={() => setIsMuted(!isMuted)}
-          onRecalibrate={() => onNavigateToCalibration?.()}
-          onSwitchProfile={() => onNavigateToProfiles?.()}
-          hoveredTargetId={hoveredTargetId}
-        />
+        {/* Collapsible Health Probe / Diagnostics Panel */}
+        {showDiagnostics && (
+          <PipelineHealthProbe
+            defaultExpanded={true}
+            enginePaused={isPaused}
+            engineFrameCount={engineFrameCount}
+            engineMachines={engineRef.current?.getMachineContexts()}
+            cursorState={cursorDiagnostics}
+            targetsCount={collectTargetRects().length}
+            hoveredTargetId={hoveredTargetId}
+            lastCommand={candidateCommand || lastGestureRecognized}
+            activeProfile={profile}
+          />
+        )}
       </div>
-
-      {/* Tracking Lost Alert Banner */}
-      {isTrackingLost && (
-        <div className="bg-rose-950/80 border border-rose-800 p-4 rounded-lg flex items-center justify-between gap-3 text-rose-200 text-xs">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-            <span>
-              We lost tracking of your {profile?.mode === 'head' ? 'face' : 'hand'}. Move back comfortably into view, then use your pause gesture or click Resume.
-            </span>
-          </div>
-          <button
-            onClick={() => setIsPaused(false)}
-            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-zinc-950 font-semibold rounded text-xs shrink-0"
-          >
-            Resume Tracking
-          </button>
-        </div>
-      )}
-
-      {/* Completion Overlay Banner */}
-      {lessonState.isCompleted && (
-        <div className="bg-emerald-950/70 border border-emerald-500/80 p-5 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4 text-emerald-100 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500 text-zinc-950 flex items-center justify-center font-bold">
-              <CheckCircle className="w-6 h-6 stroke-[2.5]" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-emerald-200">
-                Lesson Complete! Outstanding Accuracy
-              </h3>
-              <p className="text-xs text-emerald-400/90 font-mono mt-0.5">
-                All cellular organelles accurately labeled and verified hands-free.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleResetLesson}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-semibold rounded-md text-xs transition-colors shrink-0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Restart Activity
-          </button>
-        </div>
-      )}
 
       {/* Section 1: Question Understanding */}
       <section className="flex flex-col gap-3">

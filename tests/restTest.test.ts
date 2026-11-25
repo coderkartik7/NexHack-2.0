@@ -22,6 +22,7 @@ describe('Rest Test Logic & Sampler', () => {
       signals: {
         headX: 0.1, headY: 0, headRoll: 0, jawOpen: jaw, browRaise: 0, blink: 0,
         handX: 0.5, handY: 0.5, pinch: 0.8, openPalm: 1.0,
+        gazeX: 0.5, gazeY: 0.5, irisDistL: 0.5, irisDistR: 0.5, eyeOpenness: 0.25,
       },
     });
 

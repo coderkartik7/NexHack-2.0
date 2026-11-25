@@ -38,8 +38,6 @@ export class GazeCursor {
 
   private lastValidT: number | null = null;
   private lastValidPos: { x: number; y: number } | null = null;
-  private isTrackingLost = false;
-  private isStale = false;
 
   private history: GazeCursorHistoryRecord[] = [];
   private frozen = false;
@@ -121,8 +119,6 @@ export class GazeCursor {
     this.frozenPosition = null;
     this.lastValidT = null;
     this.lastValidPos = null;
-    this.isTrackingLost = false;
-    this.isStale = false;
   }
 
   public getState() {
@@ -145,7 +141,6 @@ export class GazeCursor {
     if (!gazeModel || !features || features.length < 12) {
       if (this.lastValidPos && this.lastValidT !== null && now - this.lastValidT <= this.maxInvalidHoldMs) {
         // Hold last valid position, marked stale
-        this.isStale = true;
         this.currentState = {
           ...this.currentState,
           isStale: true,
@@ -156,8 +151,6 @@ export class GazeCursor {
       }
 
       // Past 300ms hold -> mark tracking lost
-      this.isTrackingLost = true;
-      this.isStale = false;
       this.currentState = {
         ...this.currentState,
         isStale: false,
@@ -169,8 +162,6 @@ export class GazeCursor {
 
     // Valid frame
     this.lastValidT = now;
-    this.isTrackingLost = false;
-    this.isStale = false;
 
     // 1. Predict raw gaze point from features
     const rawGaze = predictGaze(gazeModel, features, this.viewportWidth, this.viewportHeight);

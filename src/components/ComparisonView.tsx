@@ -72,8 +72,8 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
                 </tr>
                 <tr>
                   <td className="py-2 px-3 text-zinc-300 font-sans">Accidental Activations (Activity)</td>
-                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userA.metrics?.accidental.total ?? 0}</td>
-                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userB.metrics?.accidental.total ?? 0}</td>
+                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userA.metrics?.accidental?.total ?? 0}</td>
+                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userB.metrics?.accidental?.total ?? 0}</td>
                   <td className="py-2 px-3 text-zinc-400">
                     {betweenComparison.deltas.accidentalTotalDiff !== null
                       ? `${betweenComparison.deltas.accidentalTotalDiff > 0 ? '+' : ''}${betweenComparison.deltas.accidentalTotalDiff}`
@@ -82,20 +82,20 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
                 </tr>
                 <tr>
                   <td className="py-2 px-3 text-zinc-300 font-sans">Accidental Activations (Rest / min)</td>
-                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userA.metrics?.accidental.duringRest ?? 0}</td>
-                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userB.metrics?.accidental.duringRest ?? 0}</td>
+                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userA.metrics?.accidental?.duringRest ?? 0}</td>
+                  <td className="py-2 px-3 text-zinc-200">{betweenComparison.userB.metrics?.accidental?.duringRest ?? 0}</td>
                   <td className="py-2 px-3 text-zinc-400">&mdash;</td>
                 </tr>
                 <tr>
                   <td className="py-2 px-3 text-zinc-300 font-sans">Task Execution Total Time</td>
                   <td className="py-2 px-3 text-zinc-200">
-                    {betweenComparison.userA.metrics?.tasks.taskTimesMs.total !== null
-                      ? `${(betweenComparison.userA.metrics!.tasks.taskTimesMs.total! / 1000).toFixed(1)} s`
+                    {betweenComparison.userA.metrics?.tasks?.taskTimesMs?.total != null
+                      ? `${(betweenComparison.userA.metrics.tasks.taskTimesMs.total / 1000).toFixed(1)} s`
                       : '--'}
                   </td>
                   <td className="py-2 px-3 text-zinc-200">
-                    {betweenComparison.userB.metrics?.tasks.taskTimesMs.total !== null
-                      ? `${(betweenComparison.userB.metrics!.tasks.taskTimesMs.total! / 1000).toFixed(1)} s`
+                    {betweenComparison.userB.metrics?.tasks?.taskTimesMs?.total != null
+                      ? `${(betweenComparison.userB.metrics.tasks.taskTimesMs.total / 1000).toFixed(1)} s`
                       : '--'}
                   </td>
                   <td className="py-2 px-3 text-zinc-400">
@@ -117,13 +117,13 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
                 <div>
                   <div className="flex justify-between mb-1 text-[11px] text-zinc-400">
                     <span>{betweenComparison.userA.participantId}</span>
-                    <span className="text-teal-400">{betweenComparison.userA.metrics?.responseTime.medianMs ?? 0} ms</span>
+                    <span className="text-teal-400">{betweenComparison.userA.metrics?.responseTime?.medianMs ?? 0} ms</span>
                   </div>
                   <div className="w-full bg-zinc-900 h-3 rounded overflow-hidden">
                     <div
                       className="bg-teal-500 h-full rounded-xs transition-all"
                       style={{
-                        width: `${Math.min(100, ((betweenComparison.userA.metrics?.responseTime.medianMs ?? 0) / 600) * 100)}%`,
+                        width: `${Math.min(100, ((betweenComparison.userA.metrics?.responseTime?.medianMs ?? 0) / 600) * 100)}%`,
                       }}
                     />
                   </div>
@@ -132,13 +132,13 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
                 <div>
                   <div className="flex justify-between mb-1 text-[11px] text-zinc-400">
                     <span>{betweenComparison.userB.participantId}</span>
-                    <span className="text-indigo-400">{betweenComparison.userB.metrics?.responseTime.medianMs ?? 0} ms</span>
+                    <span className="text-indigo-400">{betweenComparison.userB.metrics?.responseTime?.medianMs ?? 0} ms</span>
                   </div>
                   <div className="w-full bg-zinc-900 h-3 rounded overflow-hidden">
                     <div
                       className="bg-indigo-500 h-full rounded-xs transition-all"
                       style={{
-                        width: `${Math.min(100, ((betweenComparison.userB.metrics?.responseTime.medianMs ?? 0) / 600) * 100)}%`,
+                        width: `${Math.min(100, ((betweenComparison.userB.metrics?.responseTime?.medianMs ?? 0) / 600) * 100)}%`,
                       }}
                     />
                   </div>
@@ -153,13 +153,13 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
                 <div>
                   <div className="flex justify-between mb-1 text-[11px] text-zinc-400">
                     <span>{betweenComparison.userA.participantId} (Activity / Rest)</span>
-                    <span className="text-teal-400">{betweenComparison.userA.metrics?.accidental.total ?? 0}</span>
+                    <span className="text-teal-400">{betweenComparison.userA.metrics?.accidental?.total ?? 0}</span>
                   </div>
                   <div className="w-full bg-zinc-900 h-3 rounded overflow-hidden">
                     <div
                       className="bg-teal-500 h-full rounded-xs transition-all"
                       style={{
-                        width: `${Math.min(100, ((betweenComparison.userA.metrics?.accidental.total ?? 0) / 10) * 100)}%`,
+                        width: `${Math.min(100, ((betweenComparison.userA.metrics?.accidental?.total ?? 0) / 10) * 100)}%`,
                       }}
                     />
                   </div>
@@ -168,13 +168,13 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
                 <div>
                   <div className="flex justify-between mb-1 text-[11px] text-zinc-400">
                     <span>{betweenComparison.userB.participantId} (Activity / Rest)</span>
-                    <span className="text-indigo-400">{betweenComparison.userB.metrics?.accidental.total ?? 0}</span>
+                    <span className="text-indigo-400">{betweenComparison.userB.metrics?.accidental?.total ?? 0}</span>
                   </div>
                   <div className="w-full bg-zinc-900 h-3 rounded overflow-hidden">
                     <div
                       className="bg-indigo-500 h-full rounded-xs transition-all"
                       style={{
-                        width: `${Math.min(100, ((betweenComparison.userB.metrics?.accidental.total ?? 0) / 10) * 100)}%`,
+                        width: `${Math.min(100, ((betweenComparison.userB.metrics?.accidental?.total ?? 0) / 10) * 100)}%`,
                       }}
                     />
                   </div>

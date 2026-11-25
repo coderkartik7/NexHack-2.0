@@ -16,7 +16,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
     let isCancelled = false;
 
     if (videoRef.current) {
-      visionPipeline.start(videoRef.current).catch((err) => {
+      visionPipeline.acquire(videoRef.current).catch((err) => {
         if (!isCancelled) {
           console.error('Failed to start vision pipeline:', err);
         }
@@ -25,7 +25,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
 
     return () => {
       isCancelled = true;
-      visionPipeline.stop();
+      visionPipeline.release();
     };
   }, []);
 
@@ -61,11 +61,11 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
           ctx.stroke();
           ctx.setLineDash([]);
 
-          // Head landmarks drawing - refined teal technical aesthetic
-          if (inputMode === 'head' && visionPipeline.latestFaceResult?.faceLandmarks?.[0]) {
+          // Head / Eye landmarks drawing
+          if ((inputMode === 'head' || inputMode === 'eye') && visionPipeline.latestFaceResult?.faceLandmarks?.[0]) {
             const lms = visionPipeline.latestFaceResult.faceLandmarks[0];
             ctx.fillStyle = '#2dd4bf'; // teal-400
-            
+
             // Draw essential landmarks: eyes, nose, mouth
             const keyPoints = [1, 33, 133, 263, 362, 61, 291, 13, 14, 10, 152];
             for (const idx of keyPoints) {
@@ -91,6 +91,23 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
               ctx.lineTo((1.0 - pR.x) * canvas.width, pR.y * canvas.height);
               ctx.stroke();
             }
+
+            // Iris landmarks if available (468..477)
+            if (lms.length >= 478) {
+              const irisL = lms[468];
+              const irisR = lms[473];
+              ctx.fillStyle = '#38bdf8'; // sky-400
+              if (irisL) {
+                ctx.beginPath();
+                ctx.arc((1.0 - irisL.x) * canvas.width, irisL.y * canvas.height, 3, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+              if (irisR) {
+                ctx.beginPath();
+                ctx.arc((1.0 - irisR.x) * canvas.width, irisR.y * canvas.height, 3, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+            }
           }
 
           // Hand landmarks drawing
@@ -98,36 +115,39 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
             const hand = visionPipeline.latestHandResult.landmarks[0];
             ctx.strokeStyle = 'rgba(45, 212, 191, 0.7)'; // teal-400
             ctx.fillStyle = '#14b8a6';
-            ctx.lineWidth = 1.5;
 
-            // Hand connections
+            // Draw palm and finger bones
             const connections = [
-              [0, 1], [1, 2], [2, 3], [3, 4], // thumb
-              [0, 5], [5, 6], [6, 7], [7, 8], // index
-              [5, 9], [9, 10], [10, 11], [11, 12], // middle
-              [9, 13], [13, 14], [14, 15], [15, 16], // ring
-              [13, 17], [17, 18], [18, 19], [19, 20], // pinky
-              [0, 17], // palm base
+              [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
+              [0, 5], [5, 6], [6, 7], [7, 8],       // Index
+              [5, 9], [9, 10], [10, 11], [11, 12],  // Middle
+              [9, 13], [13, 14], [14, 15], [15, 16],// Ring
+              [13, 17], [17, 18], [18, 19], [19, 20],// Pinky
+              [0, 17],                              // Palm base
             ];
 
-            for (const [i, j] of connections) {
-              const p1 = hand[i];
-              const p2 = hand[j];
-              ctx.beginPath();
-              ctx.moveTo((1.0 - p1.x) * canvas.width, p1.y * canvas.height);
-              ctx.lineTo((1.0 - p2.x) * canvas.width, p2.y * canvas.height);
-              ctx.stroke();
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (const [startIdx, endIdx] of connections) {
+              const pStart = hand[startIdx];
+              const pEnd = hand[endIdx];
+              if (pStart && pEnd) {
+                ctx.moveTo((1.0 - pStart.x) * canvas.width, pStart.y * canvas.height);
+                ctx.lineTo((1.0 - pEnd.x) * canvas.width, pEnd.y * canvas.height);
+              }
             }
+            ctx.stroke();
 
-            // Draw landmark points
+            // Draw joints
             for (let i = 0; i < hand.length; i++) {
               const pt = hand[i];
-              const x = (1.0 - pt.x) * canvas.width;
-              const y = pt.y * canvas.height;
-              ctx.beginPath();
-              ctx.arc(x, y, i === 8 ? 4.5 : 2.5, 0, 2 * Math.PI);
-              ctx.fillStyle = i === 8 ? '#f43f5e' : '#2dd4bf';
-              ctx.fill();
+              if (pt) {
+                const x = (1.0 - pt.x) * canvas.width;
+                const y = pt.y * canvas.height;
+                ctx.beginPath();
+                ctx.arc(x, y, i === 4 || i === 8 ? 4 : 2.5, 0, 2 * Math.PI);
+                ctx.fill();
+              }
             }
           }
         }
@@ -140,67 +160,64 @@ export const CameraView: React.FC<CameraViewProps> = ({ showLandmarks = true }) 
   }, [showLandmarks, isStreaming, inputMode]);
 
   return (
-    <div className="relative w-full aspect-4/3 bg-zinc-950 rounded-lg overflow-hidden border border-zinc-800 shadow-sm flex flex-col justify-end">
-      {/* Video Element (mirrored display) */}
+    <div className="relative w-full aspect-4/3 bg-zinc-950 rounded-lg overflow-hidden border border-zinc-800 shadow-inner flex items-center justify-center">
+      {/* Underlying Video */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover transform -scale-x-100"
+        className="w-full h-full object-cover transform -scale-x-100"
+        autoPlay
         playsInline
         muted
       />
 
-      {/* Canvas Overlay for landmarks */}
+      {/* Foreground Technical Reticle & Landmarks Overlay */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
       />
 
-      {/* Subtle corner reticle markings */}
-      <div className="absolute top-2 left-2 text-[10px] font-mono text-zinc-400/80 bg-zinc-950/70 backdrop-blur-xs px-2 py-0.5 rounded border border-zinc-800">
-        CAM_01 &bull; {inputMode.toUpperCase()}
-      </div>
-
-      {/* Loading state */}
+      {/* Model Loading State */}
       {isLoadingModels && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/85 text-zinc-100 z-20 backdrop-blur-xs">
-          <Loader2 className="w-8 h-8 animate-spin text-teal-400 mb-2.5" />
-          <p className="text-xs font-medium text-zinc-200">Initializing MediaPipe neural models</p>
-          <span className="text-[11px] font-mono text-zinc-500 mt-1">FaceLandmarker & HandLandmarker</span>
+        <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2.5 z-10">
+          <Loader2 className="w-6 h-6 text-teal-400 animate-spin" />
+          <span className="text-xs font-mono text-zinc-300 tracking-wide uppercase">
+            Loading MediaPipe Models...
+          </span>
         </div>
       )}
 
-      {/* Error State */}
+      {/* Error Fallback */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/95 text-zinc-100 p-6 text-center z-30">
-          <AlertCircle className="w-8 h-8 text-rose-400 mb-2.5" />
-          <h3 className="text-sm font-semibold text-zinc-100">Video Capture Stream Offline</h3>
-          <p className="text-xs text-zinc-400 mt-1.5 max-w-sm font-mono leading-relaxed">{error}</p>
+        <div className="absolute inset-0 bg-zinc-950/90 flex flex-col items-center justify-center p-4 text-center z-10">
+          <AlertCircle className="w-8 h-8 text-rose-400 mb-2" />
+          <h3 className="text-sm font-semibold text-zinc-100">Camera or Model Error</h3>
+          <p className="text-xs text-zinc-400 mt-1 max-w-xs">{error}</p>
           <button
             onClick={() => {
               if (videoRef.current) {
-                visionPipeline.start(videoRef.current).catch(() => {});
+                visionPipeline.acquire(videoRef.current).catch(() => {});
               }
             }}
-            className="mt-4 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-md text-xs font-medium text-zinc-200 transition-colors"
+            className="mt-3 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-xs font-medium rounded-md transition-colors"
           >
-            Retry Camera Access
+            Retry Connection
           </button>
         </div>
       )}
 
-      {/* Quality Warning Banner */}
-      {qualityWarning && isStreaming && (
-        <div className="absolute top-3 left-3 right-3 bg-amber-950/90 border border-amber-800/80 text-amber-300 px-3 py-2 rounded-md text-xs font-medium flex items-center gap-2 shadow-sm z-10 backdrop-blur-xs">
-          <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-          <span>{qualityWarning}</span>
+      {/* Not Streaming Placeholder */}
+      {!isStreaming && !isLoadingModels && !error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 gap-2">
+          <Camera className="w-8 h-8 stroke-[1.5]" />
+          <span className="text-xs font-mono">Initializing camera...</span>
         </div>
       )}
 
-      {/* Idle / Off State indicator */}
-      {!isStreaming && !isLoadingModels && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-500 z-10">
-          <Camera className="w-8 h-8 mb-2 opacity-40" />
-          <p className="text-xs font-mono">Video stream standby</p>
+      {/* Transient Quality Warning */}
+      {isStreaming && qualityWarning && (
+        <div className="absolute bottom-3 inset-x-3 bg-amber-950/90 border border-amber-600/80 text-amber-200 px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 backdrop-blur-xs">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{qualityWarning}</span>
         </div>
       )}
     </div>

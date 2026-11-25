@@ -4,6 +4,7 @@ import type { LearnerProfile } from '../calibration/types';
 import { MetricCard } from './MetricCard';
 import { ThresholdCompare } from './ThresholdCompare';
 import { ComparisonView } from './ComparisonView';
+import { ErrorBoundary } from './ErrorBoundary';
 import { compareParticipants, compareConditions, generateFindingsNarrative } from '../eval/compare';
 import { exportMetricsToCsv, exportStudyBundleToJson, METHODOLOGY_BLOCK } from '../eval/export';
 import { Printer, Download, FileText } from 'lucide-react';
@@ -311,26 +312,28 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
           )}
         </div>
 
-        <ComparisonView
-          betweenComparison={betweenComparison}
-          recalibrationComparison={
-            recalDelta
-              ? {
-                  participantId: selectedUserA,
-                  baseline: mBaselineA,
-                  afterRecalibration: mAfterA,
-                  recalibrationDelta: recalDelta,
-                }
-              : null
-          }
-        />
+        <ErrorBoundary fallbackTitle="Unable to display comparative analytics">
+          <ComparisonView
+            betweenComparison={betweenComparison}
+            recalibrationComparison={
+              recalDelta
+                ? {
+                    participantId: selectedUserA,
+                    baseline: mBaselineA,
+                    afterRecalibration: mAfterA,
+                    recalibrationDelta: recalDelta,
+                  }
+                : null
+            }
+          />
 
-        <ThresholdCompare
-          profileA={profA}
-          profileB={profB}
-          participantAId={pA?.id ?? 'User A'}
-          participantBId={pB?.id ?? 'User B'}
-        />
+          <ThresholdCompare
+            profileA={profA}
+            profileB={profB}
+            participantAId={pA?.id ?? 'User A'}
+            participantBId={pB?.id ?? 'User B'}
+          />
+        </ErrorBoundary>
       </div>
 
       {/* Auto-Generated Factual Findings Section */}

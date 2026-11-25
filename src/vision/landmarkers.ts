@@ -38,7 +38,7 @@ class LandmarkersService {
             delegate: 'GPU',
           },
           outputFaceBlendshapes: true,
-          outputFacialTransformationMatrixes: false,
+          outputFacialTransformationMatrixes: true,
           runningMode: 'VIDEO',
           numFaces: 1,
         });
@@ -51,7 +51,7 @@ class LandmarkersService {
             delegate: 'CPU',
           },
           outputFaceBlendshapes: true,
-          outputFacialTransformationMatrixes: false,
+          outputFacialTransformationMatrixes: true,
           runningMode: 'VIDEO',
           numFaces: 1,
         });

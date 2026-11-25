@@ -57,6 +57,7 @@ describe('Signal Recorder & Deterministic Replay', () => {
     const dummySignals: Record<SignalName, number | null> = {
       headX: 0, headY: 0, headRoll: 0, jawOpen: 0.05, browRaise: 0.05,
       blink: 0.05, handX: 0.5, handY: 0.5, pinch: 0.8, openPalm: 1.0,
+      gazeX: 0.5, gazeY: 0.5, irisDistL: 0.5, irisDistR: 0.5, eyeOpenness: 0.25,
     };
 
     for (let t = 0; t <= 1000; t += 20) {

@@ -1,5 +1,5 @@
 import type { SignalFrame } from '../types/signals';
-import { visionPipeline } from '../vision/pipeline';
+import { visionPipeline, usePipelineStore } from '../vision/pipeline';
 import type { SignalFrameListener, SignalSource } from './signalSource';
 
 export class LiveSource implements SignalSource {
@@ -19,6 +19,11 @@ export class LiveSource implements SignalSource {
   public async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    usePipelineStore.getState().setSourceInfo('live', true);
+
+    // Acquire vision pipeline
+    await visionPipeline.acquire();
+
     this.pipelineUnsubscribe = visionPipeline.subscribe((frame: SignalFrame) => {
       for (const l of this.listeners) {
         l(frame);
@@ -29,10 +34,12 @@ export class LiveSource implements SignalSource {
   public stop(): void {
     if (!this.running) return;
     this.running = false;
+    usePipelineStore.getState().setSourceInfo('live', false);
     if (this.pipelineUnsubscribe) {
       this.pipelineUnsubscribe();
       this.pipelineUnsubscribe = null;
     }
+    visionPipeline.release();
   }
 
   public isActive(): boolean {

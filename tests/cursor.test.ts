@@ -30,6 +30,11 @@ function makeFrame(t: number, headX: number, headY: number): SignalFrame {
     handY: 0.5,
     pinch: 0.8,
     openPalm: 1.0,
+    gazeX: 0.5,
+    gazeY: 0.5,
+    irisDistL: 0.5,
+    irisDistR: 0.5,
+    eyeOpenness: 0.25,
   };
   return {
     t,

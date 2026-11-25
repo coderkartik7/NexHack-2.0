@@ -1,6 +1,7 @@
 import type { SignalFrame, SignalName } from '../types/signals';
 import type { LearnerProfile } from '../calibration/types';
 import type { SignalFrameListener, SignalSource } from './signalSource';
+import { usePipelineStore } from '../vision/pipeline';
 
 /**
  * Mouse & Keyboard Simulator:
@@ -49,6 +50,7 @@ export class MouseSim implements SignalSource {
   public async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    usePipelineStore.getState().setSourceInfo('mouse_sim', true);
 
     // Attach DOM event listeners
     if (typeof window !== 'undefined') {
@@ -94,6 +96,7 @@ export class MouseSim implements SignalSource {
   public stop(): void {
     if (!this.running) return;
     this.running = false;
+    usePipelineStore.getState().setSourceInfo('mouse_sim', false);
 
     if (this.intervalId !== null) {
       clearInterval(this.intervalId);
@@ -101,9 +104,18 @@ export class MouseSim implements SignalSource {
     }
 
     if (typeof window !== 'undefined') {
-      if (this.onMouseMoveHandler) window.removeEventListener('mousemove', this.onMouseMoveHandler);
-      if (this.onKeyDownHandler) window.removeEventListener('keydown', this.onKeyDownHandler);
-      if (this.onKeyUpHandler) window.removeEventListener('keyup', this.onKeyUpHandler);
+      if (this.onMouseMoveHandler) {
+        window.removeEventListener('mousemove', this.onMouseMoveHandler);
+        this.onMouseMoveHandler = null;
+      }
+      if (this.onKeyDownHandler) {
+        window.removeEventListener('keydown', this.onKeyDownHandler);
+        this.onKeyDownHandler = null;
+      }
+      if (this.onKeyUpHandler) {
+        window.removeEventListener('keyup', this.onKeyUpHandler);
+        this.onKeyUpHandler = null;
+      }
     }
   }
 
@@ -112,89 +124,91 @@ export class MouseSim implements SignalSource {
   }
 
   /**
-   * Deterministic frame generation for testing or step-by-step driving
+   * Generates a synthetic SignalFrame based on simulator state and active profile bindings.
    */
-  public generateFrame(t: number): SignalFrame {
+  public generateFrame(t = performance.now()): SignalFrame {
     const isHead = this.profile?.mode === 'head';
-    const isEye = this.profile?.mode === 'eye';
-    const mapping = this.profile?.cursorMapping ?? { gainX: 1, gainY: 1, offsetX: 0, offsetY: 0 };
 
-    // Invert mapping:
-    // normX = 0.5 + (rawX - offsetX) * gainX
-    // => rawX = offsetX + (normX - 0.5) / gainX
-    const gainX = mapping.gainX || 1;
-    const gainY = mapping.gainY || 1;
-    const rawCursorX = isHead
-      ? mapping.offsetX + (this.normX - 0.5) / gainX
-      : (mapping.offsetX || 0.5) + (this.normX - 0.5) / gainX;
-    const rawCursorY = isHead
-      ? mapping.offsetY + (this.normY - 0.5) / gainY
-      : (mapping.offsetY || 0.5) + (this.normY - 0.5) / gainY;
-
-    // Gesture signals
+    // Neutral baseline signals
     const signals: Record<SignalName, number | null> = {
-      headX: isHead ? rawCursorX : 0,
-      headY: isHead ? rawCursorY : 0,
+      headX: isHead ? (this.normX - 0.5) * 0.8 : 0,
+      headY: isHead ? (this.normY - 0.5) * 0.8 : 0,
       headRoll: 0,
       jawOpen: 0.05,
       browRaise: 0.05,
       blink: 0.05,
-      handX: !isHead && !isEye ? rawCursorX : 0.5,
-      handY: !isHead && !isEye ? rawCursorY : 0.5,
+      handX: !isHead ? this.normX : 0.5,
+      handY: !isHead ? this.normY : 0.5,
       pinch: 0.8,
       openPalm: 1.0,
       gazeX: this.normX,
       gazeY: this.normY,
-      irisDistL: this.normX,
-      irisDistR: this.normX,
+      irisDistL: 0.5,
+      irisDistR: 0.5,
       eyeOpenness: 0.25,
     };
 
     if (this.profile) {
-      // If select is held (J key), drive active value past enter
-      const sel = this.profile.commands.select;
+      const { select, grab, pause } = this.profile.commands;
+
+      // Select activation (J)
+      if (this.isHoldingSelect && select) {
+        const highEnter = select.direction === 'high';
+        signals[select.signal] = highEnter ? select.enter + 0.15 : select.enter - 0.15;
+      }
+
+      // Grab activation (K)
+      if (this.isHoldingGrab && grab) {
+        const highEnter = grab.direction === 'high';
+        signals[grab.signal] = highEnter ? grab.enter + 0.15 : grab.enter - 0.15;
+      }
+
+      // Pause activation (L)
+      if (this.isHoldingPause && pause) {
+        const highEnter = pause.direction === 'high';
+        signals[pause.signal] = highEnter ? pause.enter + 0.15 : pause.enter - 0.15;
+      }
+    } else {
+      // Fallback signals for untuned simulator
       if (this.isHoldingSelect) {
-        signals[sel.signal] = sel.direction === 'high' ? sel.enter + 0.15 : sel.enter - 0.15;
-      } else {
-        signals[sel.signal] = sel.direction === 'high' ? Math.max(0, sel.exit - 0.1) : sel.exit + 0.1;
+        signals.jawOpen = 0.6;
+        signals.pinch = 0.15;
       }
-
-      // If grab is held (K key)
-      const grb = this.profile.commands.grab;
       if (this.isHoldingGrab) {
-        signals[grb.signal] = grb.direction === 'high' ? grb.enter + 0.15 : grb.enter - 0.15;
-      } else if (!this.isHoldingSelect || sel.signal !== grb.signal) {
-        signals[grb.signal] = grb.direction === 'high' ? Math.max(0, grb.exit - 0.1) : grb.exit + 0.1;
+        signals.browRaise = 0.6;
+        signals.openPalm = 1.6;
       }
-
-      // If pause is held (L key)
-      const pau = this.profile.commands.pause;
       if (this.isHoldingPause) {
-        signals[pau.signal] = pau.direction === 'high' ? pau.enter + 0.15 : pau.enter - 0.15;
-      } else if (
-        (!this.isHoldingSelect || sel.signal !== pau.signal) &&
-        (!this.isHoldingGrab || grb.signal !== pau.signal)
-      ) {
-        signals[pau.signal] = pau.direction === 'high' ? Math.max(0, pau.exit - 0.1) : pau.exit + 0.1;
+        signals.blink = 0.9;
       }
     }
 
     return {
       t,
-      quality: { face: 0.95, hand: 0.95 },
+      quality: {
+        face: 0.95,
+        hand: 0.95,
+        eye: 0.95,
+      },
       signals,
     };
   }
 
-  // Programmatic keys control for unit testing
-  public setKeyStates(select: boolean, grab: boolean, pause: boolean): void {
-    this.isHoldingSelect = select;
-    this.isHoldingGrab = grab;
-    this.isHoldingPause = pause;
+  // Programmatic testing helpers
+  public simulateMouseMove(normX: number, normY: number): void {
+    this.normX = Math.max(0, Math.min(1, normX));
+    this.normY = Math.max(0, Math.min(1, normY));
   }
 
-  public setNormalizedPosition(x: number, y: number): void {
-    this.normX = Math.max(0, Math.min(1, x));
-    this.normY = Math.max(0, Math.min(1, y));
+  public simulateKeyDown(key: 'j' | 'k' | 'l'): void {
+    if (key === 'j') this.isHoldingSelect = true;
+    if (key === 'k') this.isHoldingGrab = true;
+    if (key === 'l') this.isHoldingPause = true;
+  }
+
+  public simulateKeyUp(key: 'j' | 'k' | 'l'): void {
+    if (key === 'j') this.isHoldingSelect = false;
+    if (key === 'k') this.isHoldingGrab = false;
+    if (key === 'l') this.isHoldingPause = false;
   }
 }
